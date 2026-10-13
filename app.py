@@ -27,7 +27,7 @@ def load_env(path=os.path.join(BASE, ".env")):
 
 load_env()
 from checker.audit import audit  # noqa: E402  (after env is loaded)
-from checker.ai_engines import ENGINE_LABELS, enabled_engines  # noqa: E402
+from checker.ai_engines import ENGINE_LABELS, _norm, enabled_engines  # noqa: E402
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024
@@ -92,6 +92,11 @@ def save_lead(row):
             pass
 
 
+def same_as_name(business_type, business_name):
+    t, n = _norm(business_type), _norm(business_name)
+    return bool(t and n) and (n in t or t in n)
+
+
 def public_engines():
     """Engines used in the free public check (default: ChatGPT only). Others are offered as an upsell."""
     wanted = [e.strip() for e in os.environ.get("PUBLIC_ENGINES", "chatgpt").split(",") if e.strip()]
@@ -129,6 +134,9 @@ def api_audit():
     email = get("email")
     if not get("url") or not get("business_name") or not get("business_type"):
         return jsonify(ok=False, error="יש למלא כתובת אתר, שם העסק ותחום."), 400
+    if same_as_name(get("business_type"), get("business_name")):
+        # the questions would contain the business name, so ChatGPT just echoes it back
+        return jsonify(ok=False, error="בשדה \"מה העסק עושה\" כתבו את התחום כמו שלקוח היה מחפש (למשל: יועץ שיווק דיגיטלי), ולא את שם העסק."), 400
     if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
         return jsonify(ok=False, error="יש להזין כתובת מייל תקינה."), 400
     domain = re.sub(r"^https?://(www\.)?", "", get("url").lower()).split("/")[0]

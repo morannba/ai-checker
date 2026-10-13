@@ -2,6 +2,7 @@
 import collections
 import datetime
 import os
+import re
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 
@@ -14,7 +15,9 @@ VERIFIED, INFERRED, NOT_TESTED = "נבדק בפועל", "הערכה", "לא נב
 def build_questions(business_type, city, custom=None):
     if custom:
         return [q.strip() for q in custom if q.strip()][:5]
-    where = f"ב{city}" if city else "בישראל"
+    city = city.strip()
+    # "בחיפה", but "ב-Haifa": a Hebrew prefix glued to Latin letters reads as a typo
+    where = (f"ב{city}" if re.match(r"[\u0590-\u05ff]", city) else f"ב-{city}") if city else "בישראל"
     t = business_type.strip()
     return [
         f"אני מחפש {t} {where}. את מי כדאי לי לבדוק?",
