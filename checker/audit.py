@@ -59,16 +59,22 @@ def run_ai(name, domain, business_type, city, custom_questions=None, engines=Non
     return {"engines": engines, "questions": questions, "runs": runs, "recommend": rec, "knowledge": know}
 
 
-def run_site(url, business_name=""):
+def fetch_home(url):
     page = safe_get(url)
     if page["error"] or page["status"] is None:
         raise ValueError("לא הצלחנו להגיע לאתר. בדקו שהכתובת נכונה ושהאתר פעיל.")
+    return page
+
+
+def run_site(page, business_name=""):
     raw_html = decode(page["content"])
     final_url = page["final_url"]
     rendered = render.render_page(final_url)
     return {
         "final_url": final_url,
         "status": page["status"],
+        # a firewall / bot challenge answered our plain request, so the raw HTML is not the real page
+        "challenged": page["status"] in (401, 403, 429, 503) or ai_access.is_challenge(page["content"]),
         "robots": ai_access.check_robots(final_url),
         "probe": ai_access.probe_bots(final_url),
         "readability": site_signals.readability(raw_html, rendered, business_name),
@@ -82,8 +88,9 @@ def run_site(url, business_name=""):
 def audit(url, business_name, business_type, city="", custom_questions=None, engines=None, runs=None):
     url = normalize_url(url)
     domain = urllib.parse.urlparse(url).hostname.removeprefix("www.")
+    page = fetch_home(url)  # before any paid AI call: a typo in the URL should cost nothing
     with ThreadPoolExecutor(max_workers=2) as pool:
-        f_site = pool.submit(run_site, url, business_name)
+        f_site = pool.submit(run_site, page, business_name)
         f_ai = pool.submit(run_ai, business_name, domain, business_type, city, custom_questions, engines, runs)
         site, ai = f_site.result(), f_ai.result()
     report = {
@@ -101,6 +108,10 @@ def audit(url, business_name, business_type, city="", custom_questions=None, eng
 L = ai_engines.ENGINE_LABELS
 
 
+def _times(k):
+    return "בתשובה אחת" if k == 1 else f"ב-{k} תשובות"
+
+
 def F(section, title, body, action="", status=VERIFIED, level="info", items=None):
     return {"section": section, "title": title, "body": body, "action": action, "status": status,
             "level": level, "items": items or []}
@@ -108,12 +119,12 @@ def F(section, title, body, action="", status=VERIFIED, level="info", items=None
 
 def _competitors(ai, business_name, domain):
     own = ai_engines._norm(business_name)
-    root = ai_engines.domain_root(domain)
+    root = ai_engines._compact(ai_engines.domain_root(domain))
     c = collections.Counter()
     for r in ai.get("recommend", []):
         for n in dict.fromkeys(r.get("businesses", [])):  # once per answer
             nn = ai_engines._norm(n)
-            is_self = (own and (nn == own or own in nn)) or (len(root) >= 4 and root in nn.replace(" ", ""))
+            is_self = ai_engines.name_in_text(own, nn) or (len(root) >= 4 and ai_engines._compact(nn) == root)
             if nn and not is_self:
                 c[n] += 1
     return c
@@ -123,7 +134,7 @@ def _sources(ai, domain):
     c = collections.Counter()
     for r in ai.get("recommend", []):
         for d in {x.get("domain", "").lower() for x in r.get("citations", [])}:
-            if d and not d.endswith(domain):
+            if d and not ai_engines.own_domain(d, domain):
                 c[d] += 1
     return c
 
@@ -150,7 +161,7 @@ def build_findings(name, domain, site, ai):
         ok = [r for r in rec if not r["error"]]
         hits = sum(r["mentioned"] for r in ok)
         comp = _competitors(ai, name, domain).most_common(8)
-        comp_items = [f"{n} — הופיע ב-{k} תשובות" for n, k in comp]
+        comp_items = [f"{n} — הופיע {_times(k)}" for n, k in comp]
         qs = " · ".join(f"„{q}”" for q in ai["questions"])
         zero_engines = [L[e] for e in ai["engines"]
                         if any(r["engine"] == e for r in ok) and not any(r["mentioned"] for r in ok if r["engine"] == e)]
@@ -194,7 +205,7 @@ def build_findings(name, domain, site, ai):
             out.append(F(S3, "האתרים שה-AI מצטט כשהוא עונה על התחום שלך",
                          "אלה המקורות שהופיעו בתשובות על השאלות למעלה:",
                          "להופיע במקורות האלה (פרופיל, ביקורות, כתבה, רשימה) היא הדרך הכי ישירה להיכנס לתשובות.",
-                         VERIFIED, "info", [f"{d} — {k} תשובות" for d, k in src]))
+                         VERIFIED, "info", [f"{d} — צוטט {_times(k)}" for d, k in src]))
 
     # 4. access
     robots = site["robots"]
@@ -224,7 +235,13 @@ def build_findings(name, domain, site, ai):
 
     # 5. readability
     rd = site["readability"]
-    if rd["ratio"] is not None and rd["rendered_words"] and rd["rendered_words"] > 100 and rd["ratio"] < 0.5:
+    if site.get("challenged"):
+        out.append(F(S5, "האתר חסם את הסריקה שלנו, ולכן לא בדקנו מה בוטים קוראים בו",
+                     f"כשנכנסנו לעמוד הבית בלי דפדפן קיבלנו {site['status']} או דף אימות במקום התוכן. "
+                     "ייתכן שגם בוטים של AI מקבלים את אותו דף.",
+                     "לבדוק בהגדרות Cloudflare או אצל חברת האחסון אם יש הגנה שחוסמת בקשות אוטומטיות.",
+                     NOT_TESTED, "warn"))
+    elif rd["ratio"] is not None and rd["rendered_words"] and rd["rendered_words"] > 100 and rd["ratio"] < 0.5:
         out.append(F(S5, "רוב התוכן באתר נטען רק עם JavaScript, ובוטים של AI לא רואים אותו",
                      f"בדפדפן יש בעמוד כ-{rd['rendered_words']} מילים. בגרסה שבוטים קוראים (בלי JavaScript) יש רק כ-{rd['raw_words']}.",
                      "צריך רינדור בצד השרת (SSR) או גרסה סטטית של העמודים החשובים.", VERIFIED, "bad"))
@@ -237,7 +254,7 @@ def build_findings(name, domain, site, ai):
                      f"כ-{rd['raw_words']} מילים זמינות לבוטים ישירות." +
                      ("" if site["rendered_ok"] else " (לא הצלחנו להשוות לגרסת הדפדפן.)"),
                      status=VERIFIED if site["rendered_ok"] else INFERRED, level="good"))
-    if rd.get("phone_in_rendered") and not rd["phone_in_raw"]:
+    if rd.get("phone_in_rendered") and not rd["phone_in_raw"] and not site.get("challenged"):
         out.append(F(S5, "הטלפון מופיע רק אחרי טעינת JavaScript", "בוטים שלא מריצים JavaScript לא יראו אותו.",
                      "להציג את הטלפון כטקסט רגיל בעמוד.", VERIFIED, "warn"))
     sch = site["schema"]

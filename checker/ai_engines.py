@@ -142,7 +142,7 @@ def ask(engine, question, city="", use_search=True):
             if key and key not in seen:
                 seen.add(key)
                 uniq.append(c)
-        return {"engine": engine, "question": question, "text": text, "citations": uniq, "error": None}
+        return {"engine": engine, "question": question, "text": clean_text(text), "citations": uniq, "error": None}
     except Exception as e:
         return {"engine": engine, "question": question, "text": "", "citations": [], "error": str(e)[:300]}
 
@@ -190,7 +190,7 @@ def knows_business(answer, question, engine):
 
 def _norm(s):
     s = (s or "").lower()
-    s = re.sub(r"בע[\"״']?מ|ltd\.?|inc\.?", " ", s)
+    s = re.sub(r"בע[\"״']?מ|\bltd\.?|\binc\.?", " ", s)
     return re.sub(r"[\s\"'״׳.,\-–()]+", " ", s).strip()
 
 
@@ -202,11 +202,44 @@ def domain_root(domain):
     return parts[-2] if len(parts) >= 2 else parts[0]
 
 
+def _compact(s):
+    return re.sub(r"[^\w]", "", (s or "").lower())
+
+
+# Hebrew prefixes that attach to a name: ה, ב, ל, מ, ו, ש, כ (and pairs like "וב", "שה").
+_HE_PREFIX = r"(?:[והבלמשכ]{1,2})?"
+
+
+def name_in_text(name, text):
+    """Whole-word match of a normalized name inside normalized text, allowing Hebrew prefixes."""
+    if not name or len(name) < 2:
+        return False
+    return re.search(r"(?<!\w)" + _HE_PREFIX + re.escape(name) + r"(?!\w)", text) is not None
+
+
+def own_domain(cite_domain, domain):
+    d, dom = (cite_domain or "").lower(), (domain or "").lower()
+    return bool(d and dom) and (d == dom or d.endswith("." + dom))
+
+
 def is_mentioned(result, business_name, domain):
-    name, root = _norm(business_name), domain_root(domain)
+    name, root = _norm(business_name), _compact(domain_root(domain))
     text = _norm(result.get("text"))
-    by_text = bool(name and len(name) >= 2 and name in text) or bool(root and len(root) >= 4 and root in text.replace(" ", ""))
-    by_cite = any(
-        (c.get("domain") or "").endswith(domain) or (root and root in (c.get("domain") or "").lower())
-        for c in result.get("citations", []))
-    return by_text or by_cite, by_cite
+    by_name = name_in_text(name, text)
+    words = text.split()
+    # the domain root written as 1-3 words, e.g. "cohen-cpa" / "Cohen CPA" for cohen-cpa.co.il
+    by_domain = len(root) >= 4 and (domain.lower() in (result.get("text") or "").lower() or any(
+        _compact("".join(words[i:i + n])) == root for n in (1, 2, 3) for i in range(len(words))))
+    by_cite = any(own_domain(c.get("domain"), domain) for c in result.get("citations", []))
+    return by_name or by_domain or by_cite, by_cite
+
+
+_MD_CITE = re.compile(r"\s*\(\[[^\]]*\]\([^)]*\)\)")      # " ([site.co.il](https://...))"
+_MD_LINK = re.compile(r"\[([^\]]+)\]\((?:https?://)[^)]*\)")  # "[text](https://...)" -> "text"
+
+
+def clean_text(text):
+    """Remove inline citation links the engines put in the answer; sources are listed separately."""
+    text = _MD_LINK.sub(r"\1", _MD_CITE.sub("", text or ""))
+    text = re.sub(r"\*\*(.+?)\*\*|__(.+?)__", lambda m: m.group(1) or m.group(2), text)  # **bold**
+    return re.sub(r"(?m)^#{1,6}\s+", "", text).strip()  # "## heading"

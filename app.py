@@ -39,14 +39,37 @@ LEADS_CSV = os.path.join(DATA, "leads.csv")
 _lock, _counts = threading.Lock(), {}
 
 
-def _allow(key, limit):
+def _take(limits):
+    """limits: [(key, max_per_day)]. Takes one from each only if all have room. Returns the taken keys or None."""
     day = datetime.date.today().isoformat()
     with _lock:
-        n = _counts.get((day, key), 0)
-        if n >= limit:
-            return False
-        _counts[(day, key)] = n + 1
-        return True
+        if any(_counts.get((day, k), 0) >= n for k, n in limits):
+            return None
+        keys = [(day, k) for k, _ in limits]
+        for k in keys:
+            _counts[k] = _counts.get(k, 0) + 1
+        return keys
+
+
+def _give_back(keys):
+    with _lock:
+        for k in keys or []:
+            _counts[k] = max(0, _counts.get(k, 0) - 1)
+
+
+def client_ip():
+    """The client IP as seen by our own proxy. X-Forwarded-For entries left of the proxies we trust are
+    written by the client and can be faked, so we count PROXY_HOPS entries from the right
+    (1 on Render/Railway; 2 if Cloudflare's proxy is also in front)."""
+    hops = int(os.environ.get("PROXY_HOPS", "1"))
+    parts = [x.strip() for x in request.headers.get("X-Forwarded-For", "").split(",") if x.strip()]
+    if hops > 0 and len(parts) >= hops:
+        return parts[-hops]
+    return request.remote_addr or ""
+
+
+# Each audit opens a Chromium and up to 6 AI calls; cap how many run at once so a burst can't exhaust memory.
+_audit_slots = threading.BoundedSemaphore(int(os.environ.get("MAX_CONCURRENT_AUDITS", "3")))
 
 
 LEAD_FIELDS = ["time", "report_id", "name", "email", "phone", "business_name", "business_type", "city", "url",
@@ -108,22 +131,28 @@ def api_audit():
         return jsonify(ok=False, error="יש למלא כתובת אתר, שם העסק ותחום."), 400
     if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
         return jsonify(ok=False, error="יש להזין כתובת מייל תקינה."), 400
-    ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
     domain = re.sub(r"^https?://(www\.)?", "", get("url").lower()).split("/")[0]
-    if not (_allow("ip:" + ip, int(os.environ.get("MAX_PER_IP", "3")))
-            and _allow("domain:" + domain, int(os.environ.get("MAX_PER_DOMAIN", "2")))
-            and _allow("email:" + email.lower(), int(os.environ.get("MAX_PER_EMAIL", "2")))):
+    taken = _take([("ip:" + client_ip(), int(os.environ.get("MAX_PER_IP", "3"))),
+                   ("domain:" + domain, int(os.environ.get("MAX_PER_DOMAIN", "2"))),
+                   ("email:" + email.lower(), int(os.environ.get("MAX_PER_EMAIL", "2")))])
+    if not taken:
         return jsonify(ok=False, error="הגעתם למספר הבדיקות היומי. נסו שוב מחר, או כתבו לנו."), 429
+    if not _audit_slots.acquire(timeout=60):
+        _give_back(taken)
+        return jsonify(ok=False, error="יש כרגע הרבה בדיקות במקביל. נסו שוב בעוד דקה."), 503
     custom = [q for q in get("custom_questions", 1000).splitlines() if q.strip()]
     t0 = time.time()
     try:
         report = audit(get("url"), get("business_name"), get("business_type"), get("city"), custom or None,
                        engines=public_engines() or ["none"])
-    except ValueError as e:
+    except ValueError as e:  # bad or unreachable URL: nothing was spent, so the check doesn't count
+        _give_back(taken)
         return jsonify(ok=False, error=str(e)), 400
-    except Exception as e:  # keep the user-facing message simple
+    except Exception:  # keep the user-facing message simple
         app.logger.exception("audit failed")
         return jsonify(ok=False, error="הבדיקה נכשלה. נסו שוב בעוד כמה דקות."), 500
+    finally:
+        _audit_slots.release()
     rid = uuid.uuid4().hex[:12]
     report["id"], report["seconds"] = rid, round(time.time() - t0)
     with open(os.path.join(DATA, "reports", rid + ".json"), "w", encoding="utf-8") as f:

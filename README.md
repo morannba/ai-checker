@@ -42,7 +42,7 @@ py run_check.py www.example.co.il "שם העסק" "רואה חשבון" "חיפ�
 
 ב-Render.com (או Railway): Web Service חדש מתוך ריפו ב-GitHub.
 - Build command: `pip install -r requirements.txt && playwright install --with-deps chromium`
-- Start command: `gunicorn app:app --workers 2 --threads 8 --timeout 240 --bind 0.0.0.0:$PORT`
+- Start command: `gunicorn app:app --workers 1 --threads 8 --timeout 240 --bind 0.0.0.0:$PORT`
 - את המפתחות מכניסים ב-Environment, לא בקוד.
 - בשרת חינמי הקבצים נמחקים באתחול, ולכן שם חשוב להגדיר `LEAD_WEBHOOK_URL` כדי לא לאבד לידים.
 

@@ -27,7 +27,14 @@ PROBE_UAS = {
     "PerplexityBot": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; PerplexityBot/1.0; +https://perplexity.ai/perplexitybot)",
 }
 
-CHALLENGE_MARKERS = ("cf-chl", "challenge-platform", "just a moment", "attention required", "captcha")
+# Phrases from bot-challenge / block pages. Not "captcha" on its own: many normal pages load reCAPTCHA.
+CHALLENGE_MARKERS = ("cf-chl", "challenge-platform", "just a moment...", "attention required! | cloudflare",
+                     "cf-browser-verification", "access denied", "request blocked")
+
+
+def is_challenge(content):
+    body = decode(content[:20000]).lower()
+    return any(m in body for m in CHALLENGE_MARKERS)
 
 
 def check_robots(final_url):
@@ -51,13 +58,14 @@ def check_robots(final_url):
     return out
 
 
-def _looks_blocked(res, baseline_status):
+def _looks_blocked(res, base):
+    if base["status"] != 200 or is_challenge(base["content"]):
+        return False  # we could not get in as a browser either, so there is nothing to compare
     if res["error"]:
         return True
-    if res["status"] in (401, 403, 406, 429, 503) and baseline_status == 200:
+    if res["status"] in (401, 403, 406, 429, 503):
         return True
-    body = decode(res["content"][:20000]).lower()
-    return baseline_status == 200 and any(m in body for m in CHALLENGE_MARKERS)
+    return is_challenge(res["content"])
 
 
 def probe_bots(final_url):
@@ -69,5 +77,5 @@ def probe_bots(final_url):
     results = []
     for bot, ua in PROBE_UAS.items():
         r = safe_get(final_url, ua, max_bytes=200_000)
-        results.append({"bot": bot, "status": r["status"], "blocked": _looks_blocked(r, base["status"])})
+        results.append({"bot": bot, "status": r["status"], "blocked": _looks_blocked(r, base)})
     return {"browser_status": base["status"], "results": results}
