@@ -1,10 +1,11 @@
 """Runs all checks and turns them into a short, plain-Hebrew report (no overall score)."""
-import collections
 import datetime
 import os
 import re
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
+
+from bs4 import BeautifulSoup
 
 from . import ai_access, ai_engines, render, site_signals
 from .fetch import decode, normalize_url, safe_get
@@ -41,10 +42,23 @@ def resolve_scope(scope, city):
 
 
 def knowledge_question(name, domain):
-    return f"מה אתה יודע על {name} ({domain})? מה הם עושים, איפה הם פועלים ומה אומרים עליהם?"
+    # anchored to the site: a shared name must not pull in another business or person
+    return (f"מה אתה יודע על העסק שהאתר שלו הוא {domain} (שם העסק: {name})? "
+            f"ענה רק על העסק של האתר הזה, ואל תערבב מידע על עסקים או אנשים אחרים עם שם דומה. "
+            f"מה הם עושים, איפה הם פועלים ומה אומרים עליהם?")
 
 
-def run_ai(name, domain, business_type, city, custom_questions=None, engines=None, runs=None, scope="local"):
+def site_summary(html):
+    """What the homepage says about the business, so the judge can tell it apart from a namesake."""
+    soup = BeautifulSoup(html, "html.parser")
+    title = soup.title.get_text(" ", strip=True) if soup.title else ""
+    meta = soup.find("meta", attrs={"name": re.compile("^description$", re.I)})
+    desc = meta.get("content", "") if meta else ""
+    return "\n".join(x for x in (title, desc, site_signals.visible_text_from_html(html)[:1500]) if x)
+
+
+def run_ai(name, domain, business_type, city, custom_questions=None, engines=None, runs=None, scope="local",
+           site_text=""):
     available = ai_engines.enabled_engines()
     engines = [e for e in (engines or available) if e in available]
     if not engines:
@@ -67,10 +81,12 @@ def run_ai(name, domain, business_type, city, custom_questions=None, engines=Non
         r["mentioned"], r["own_site_cited"] = ai_engines.is_mentioned(r, name, domain)
     know = [r for k, r in results if k == "knowledge"]
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        knows = list(pool.map(lambda r: ai_engines.knows_business(r["text"], r["question"], r["engine"]), know))
-    for r, k in zip(know, knows):
+        verdicts = list(pool.map(
+            lambda r: ai_engines.knows_business(r["text"], r["question"], r["engine"], domain, site_text), know))
+    for r, v in zip(know, verdicts):
         _, r["own_site_cited"] = ai_engines.is_mentioned(r, name, domain)
-        r["mentioned"] = k or r["own_site_cited"]
+        r["identity"] = v  # "match" / "other" (describes a namesake) / "none"
+        r["mentioned"] = v == "match" or (v != "other" and r["own_site_cited"])
     return {"engines": engines, "questions": questions, "runs": runs, "recommend": rec, "knowledge": know}
 
 
@@ -109,7 +125,8 @@ def audit(url, business_name, business_type, city="", custom_questions=None, eng
     page = fetch_home(url)  # before any paid AI call: a typo in the URL should cost nothing
     with ThreadPoolExecutor(max_workers=2) as pool:
         f_site = pool.submit(run_site, page, business_name)
-        f_ai = pool.submit(run_ai, business_name, domain, business_type, city, custom_questions, engines, runs, scope)
+        f_ai = pool.submit(run_ai, business_name, domain, business_type, city, custom_questions, engines, runs, scope,
+                           site_summary(decode(page["content"])))
         site, ai = f_site.result(), f_ai.result()
     report = {
         "business": {"name": business_name, "type": business_type, "city": city, "scope": scope, "url": url, "domain": domain},
@@ -135,18 +152,9 @@ def F(section, title, body, action="", status=VERIFIED, level="info", items=None
             "level": level, "items": items or []}
 
 
-def _sources(ai, domain):
-    c = collections.Counter()
-    for r in ai.get("recommend", []):
-        for d in {x.get("domain", "").lower() for x in r.get("citations", [])}:
-            if d and not ai_engines.own_domain(d, domain):
-                c[d] += 1
-    return c
-
-
 def build_findings(name, domain, site, ai):
     out = []
-    S1, S2, S3 = "האם AI ממליץ עליך", "מה AI יודע על העסק", "על אילו מקורות AI נשען"
+    S1, S2 = "האם AI ממליץ עליך", "מה AI יודע על העסק"
     S4, S5, S6 = "האם AI יכול להיכנס לאתר", "האם AI יכול לקרוא את האתר", "מדידה ופרסום"
 
     # 1. recommendations
@@ -190,6 +198,14 @@ def build_findings(name, domain, site, ai):
             if r["error"]:
                 out.append(F(S2, f"{L[r['engine']]}: הבדיקה נכשלה", r["error"][:200], status=NOT_TESTED, level="warn"))
                 continue
+            if r.get("identity") == "other":
+                t, lv = f"{L[r['engine']]} מבלבל אותך עם עסק או אדם אחר", "bad"
+                excerpt = r["text"][:600] + ("…" if len(r["text"]) > 600 else "")
+                out.append(F(S2, t, "התיאור שהוא נתן לא מתאים למה שכתוב באתר שלך:\n" + excerpt,
+                             "כשיש עוד גורם עם שם דומה, ה-AI מערבב ביניכם. צריך לחזק את הזהות שלכם ברשת: "
+                             "שם מלא, מי עומד מאחורי העסק ומה הוא עושה, באופן עקבי באתר, בפרופילים ובנתונים "
+                             "המובנים (Schema), כדי שהמנוע יידע מי זה מי.", VERIFIED, lv))
+                continue
             if r["own_site_cited"]:
                 t, lv = f"{L[r['engine']]} מצא את האתר שלך והשתמש בו", "good"
             elif r["mentioned"]:
@@ -200,14 +216,6 @@ def build_findings(name, domain, site, ai):
             out.append(F(S2, t, "מה הוא ענה:\n" + excerpt,
                          "קראו את התשובה ובדקו אם הפרטים נכונים (שירותים, אזור, טלפון). מידע שגוי כאן "
                          "יגיע גם ללקוחות ששואלים עליכם.", VERIFIED, lv))
-
-        # 3. sources
-        src = _sources(ai, domain).most_common(8)
-        if src:
-            out.append(F(S3, "האתרים שה-AI מצטט כשהוא עונה על התחום שלך",
-                         "אלה המקורות שהופיעו בתשובות על השאלות למעלה:",
-                         "להופיע במקורות האלה (פרופיל, ביקורות, כתבה, רשימה) היא הדרך הכי ישירה להיכנס לתשובות.",
-                         VERIFIED, "info", [f"{d} — צוטט {_times(k)}" for d, k in src]))
 
     # 4. access
     robots = site["robots"]

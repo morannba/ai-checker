@@ -132,9 +132,8 @@ function answers(ai) {
   const rows = ai.recommend.concat(ai.knowledge || []).map(r => `<div class="ans">
      <div class="q">${esc(LABEL[r.engine] || r.engine)} · „${esc(r.question)}”</div>
      ${r.error ? `<div class="no">הבדיקה נכשלה</div>` :
-       `<div>${r.mentioned ? '<span class="yes">העסק הופיע</span>' : '<span class="no">העסק לא הופיע</span>'}</div>
-        <div class="t">${esc(r.text)}</div>
-        ${r.citations.length ? `<div class="src">מקורות: ${r.citations.map(c => esc(c.domain || c.url)).join(' · ')}</div>` : ''}`}
+       `<div>${r.identity === 'other' ? '<span class="no">תיאור של עסק אחר</span>' : r.mentioned ? '<span class="yes">העסק הופיע</span>' : '<span class="no">העסק לא הופיע</span>'}</div>
+        <div class="t">${esc(r.text)}</div>`}
    </div>`).join('');
   return `<details class="card"><summary>כל התשובות המלאות (${ai.recommend.length + (ai.knowledge || []).length})</summary>${rows}</details>`;
 }

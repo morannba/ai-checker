@@ -67,8 +67,8 @@ class AI(BaseHTTPRequestHandler):
         AI.calls.append((self.path, body))
         if self.path.endswith("/responses"):  # OpenAI
             q = body["input"]
-            if "knows" in q:
-                out = {"output": [{"type": "message", "content": [{"type": "output_text", "text": '{"knows": false}'}]}]}
+            if "verdict" in q:
+                out = {"output": [{"type": "message", "content": [{"type": "output_text", "text": '{"verdict": "none"}'}]}]}
             elif "JSON" in q:
                 out = {"output": [{"type": "message", "content": [{"type": "output_text",
                        "text": json.dumps({"businesses": ["משרד לוינסון רואי חשבון", "ברק את גולן", "מזרחי ושות'"]}, ensure_ascii=False)}]}]}
@@ -79,8 +79,8 @@ class AI(BaseHTTPRequestHandler):
                                        {"type": "url_citation", "url": "https://www.easy.co.il/y", "title": "איזי"}]}]}]}
         elif ":generateContent" in self.path:  # Gemini
             q = body["contents"][0]["parts"][0]["text"]
-            if "knows" in q:
-                text = '{"knows": true}'
+            if "verdict" in q:
+                text = '{"verdict": "match"}'
             elif "JSON" in q:
                 text = json.dumps({"businesses": ["ברק את גולן", "כהן ושות' רואי חשבון"]}, ensure_ascii=False)
             else:

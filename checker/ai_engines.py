@@ -151,22 +151,30 @@ def ask(engine, question, city="", use_search=True):
 
 # --- helpers ----------------------------------------------------------------
 KNOW_PROMPT = (
-    "Below is an AI assistant's answer to the question \"{question}\". Does the answer give concrete, specific "
-    "information about this exact business (e.g. its services, location, people, reviews)? Saying it has no "
-    "information, or only repeating the name, counts as false. Reply with JSON only: {{\"knows\": true}} or "
-    "{{\"knows\": false}}\n\nANSWER:\n{answer}"
+    "An AI assistant was asked: \"{question}\"\n\nThe business is the one behind the website {domain}. "
+    "This is what that website says about itself:\n<site>\n{site}\n</site>\n\n"
+    "Classify the assistant's answer below:\n"
+    "- \"match\": it gives concrete, specific information that fits the business of this website.\n"
+    "- \"other\": its main description is of a different business or person (e.g. same or similar name, "
+    "but different people, services or history than the website shows).\n"
+    "- \"none\": it says it has no information, or only repeats the name or domain.\n"
+    "Reply with JSON only: {{\"verdict\": \"match\"}}, {{\"verdict\": \"other\"}} or {{\"verdict\": \"none\"}}"
+    "\n\nANSWER:\n{answer}"
 )
 
 
-def knows_business(answer, question, engine):
+def knows_business(answer, question, engine, domain="", site_text=""):
+    """match / other / none: does the answer describe the business of this site, a namesake, or nothing."""
     if not answer:
-        return False
-    res = ask(engine, KNOW_PROMPT.format(question=question, answer=answer[:6000]), use_search=False)
+        return "none"
+    res = ask(engine, KNOW_PROMPT.format(question=question, domain=domain, site=(site_text or "(not available)")[:2500],
+                                         answer=answer[:6000]), use_search=False)
     m = re.search(r"\{.*\}", res["text"] or "", re.S)
     try:
-        return bool(json.loads(m.group(0)).get("knows")) if m else False
+        v = json.loads(m.group(0)).get("verdict") if m else None
     except (ValueError, AttributeError):
-        return False
+        v = None
+    return v if v in ("match", "other", "none") else "none"
 
 
 def _norm(s):
