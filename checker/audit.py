@@ -189,7 +189,7 @@ def build_findings(name, domain, site, ai):
         body = (f"שאלנו את השאלות שלקוח היה שואל: {qs}. כל שאלה הורצה {ai['runs']} פעמים בכל מנוע, "
                 f"כי התשובות משתנות בין הרצות.\n" + "\n".join(per))
         # No list of "competitors": the names in an answer are not necessarily competing with this business.
-        action = ("כדי להופיע ביותר תשובות: להופיע באתרים שה-AI מצטט (בסעיף הבא), לאסוף ביקורות, "
+        action = ("כדי להופיע ביותר תשובות: להופיע באתרים שמדברים על התחום שלכם (מדריכים, אינדקסים, כתבות), לאסוף ביקורות, "
                   "ולוודא שבאתר יש עמודי שירות שמסבירים בבירור מה אתם עושים ולמי.") if ok and hits < len(ok) else ""
         out.append(F(S1, title, body, action, VERIFIED, level))
 
