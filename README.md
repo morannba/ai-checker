@@ -40,11 +40,12 @@ py run_check.py www.example.co.il "שם העסק" "רואה חשבון" "חיפ�
 
 ## העלאה לאינטרנט (לקמפיין)
 
-ב-Render.com (או Railway): Web Service חדש מתוך ריפו ב-GitHub.
-- Build command: `pip install -r requirements.txt && playwright install --with-deps chromium`
-- Start command: `gunicorn app:app --workers 1 --threads 8 --timeout 240 --bind 0.0.0.0:$PORT`
-- את המפתחות מכניסים ב-Environment, לא בקוד.
-- בשרת חינמי הקבצים נמחקים באתחול, ולכן שם חשוב להגדיר `LEAD_WEBHOOK_URL` כדי לא לאבד לידים.
+ב-Render.com: New → Web Service → בוחרים את הריפו `ai-checker`. Render מזהה את ה-`Dockerfile` ובונה ממנו (הוא כולל את הדפדפן שהבדיקה צריכה).
+- Instance type: מומלץ Starter ומעלה. כל בדיקה פותחת דפדפן, ובשרת החינמי (512MB) זה עלול לקרוס.
+- Environment: מכניסים שם את `OPENAI_API_KEY`, `CTA_URL`, `LEAD_WEBHOOK_URL` ושאר ההגדרות מ-`.env.example`. לא בקוד.
+- דומיין: Settings → Custom Domains → מוסיפים למשל `check.growthwithmoran.com`, ומוסיפים אצל ספק הדומיין רשומת CNAME לפי מה ש-Render מציג.
+- אם הדומיין עובר דרך Cloudflare במצב Proxy (ענן כתום), מגדירים `PROXY_HOPS=2`.
+- הקבצים בשרת נמחקים בכל פריסה, ולכן חשוב להגדיר `LEAD_WEBHOOK_URL` כדי לא לאבד לידים.
 
 ## בדיקה בלי אינטרנט
 
