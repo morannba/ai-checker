@@ -74,7 +74,7 @@ _audit_slots = threading.BoundedSemaphore(int(os.environ.get("MAX_CONCURRENT_AUD
 
 LEAD_FIELDS = ["time", "report_id", "name", "email", "phone", "business_name", "business_type", "city", "scope", "url",
                "ad_platforms", "ad_budget", "site_platform", "goal", "ai_answers", "ai_mentions",
-               "top_competitors", "blocked_search_bots", "tags", "utm_source", "utm_campaign", "utm_content"]
+               "blocked_search_bots", "tags", "utm_source", "utm_campaign", "utm_content"]
 
 
 def save_lead(row):
@@ -176,7 +176,7 @@ def api_audit():
         "ad_platforms": ", ".join(p.get("ad_platforms") or [])[:200] if isinstance(p.get("ad_platforms"), list) else get("ad_platforms"),
         "ad_budget": get("ad_budget"), "site_platform": get("site_platform"), "goal": get("goal"),
         "ai_answers": s["ai_answers"], "ai_mentions": s["ai_mentions"],
-        "top_competitors": " | ".join(s["top_competitors"]), "blocked_search_bots": ", ".join(s["blocked_search_bots"]),
+        "blocked_search_bots": ", ".join(s["blocked_search_bots"]),
         "tags": ", ".join(s["tags"]), "utm_source": get("utm_source"), "utm_campaign": get("utm_campaign"),
         "utm_content": get("utm_content"),
     })

@@ -48,7 +48,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,su
 <section class="card" id="formCard">
   <div class="eyebrow">בדיקה חינמית</div>
   <h1>מה ה-AI ממליץ ללקוחות שמחפשים עסק כמו שלך?</h1>
-  <p class="sub">אנחנו שואלים את {{ engines|join(", ") if engines else "ChatGPT" }} את השאלות שלקוחות שואלים בתחום שלך, ומראים מי מופיע, אם אתם מופיעים, ועל אילו אתרים ה-AI נשען. הבדיקה לוקחת כדקה.</p>
+  <p class="sub">אנחנו שואלים את {{ engines|join(", ") if engines else "ChatGPT" }} את השאלות שלקוחות שואלים בתחום שלך, ומראים אם הוא ממליץ עליכם, מה הוא יודע על העסק ועל אילו אתרים הוא נשען. הבדיקה לוקחת כדקה.</p>
   <form id="f">
     <div class="grid">
       <div class="full"><label for="url">כתובת האתר</label><input id="url" name="url" type="text" inputmode="url" placeholder="www.example.co.il" required></div>
@@ -145,7 +145,6 @@ function render(r) {
     <h2>${esc(b.domain)}</h2><div class="tag">נוצר ${esc(r.generated_at)}</div>
     <div class="summary">
       <span class="pill">הופעת ב-${s.ai_mentions} מתוך ${s.ai_answers} תשובות AI</span>
-      ${s.top_competitors.length ? `<span class="pill">הכי מופיעים במקומך: ${esc(s.top_competitors.join(', '))}</span>` : ''}
     </div></section>`;
   let last = '';
   for (const f of r.findings) {

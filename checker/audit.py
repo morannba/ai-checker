@@ -62,12 +62,8 @@ def run_ai(name, domain, business_type, city, custom_questions=None, engines=Non
     with ThreadPoolExecutor(max_workers=workers) as pool:
         results = list(pool.map(lambda j: (j[0], ai_engines.ask(j[1], j[2], location)), jobs))
 
-    # extract named businesses from each recommendation answer (cheap, no search)
     rec = [r for k, r in results if k == "recommend"]
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        names = list(pool.map(lambda r: ai_engines.extract_businesses(r["text"], r["engine"]), rec))
-    for r, n in zip(rec, names):
-        r["businesses"] = n
+    for r in rec:
         r["mentioned"], r["own_site_cited"] = ai_engines.is_mentioned(r, name, domain)
     know = [r for k, r in results if k == "knowledge"]
     with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -139,19 +135,6 @@ def F(section, title, body, action="", status=VERIFIED, level="info", items=None
             "level": level, "items": items or []}
 
 
-def _competitors(ai, business_name, domain):
-    own = ai_engines._norm(business_name)
-    root = ai_engines._compact(ai_engines.domain_root(domain))
-    c = collections.Counter()
-    for r in ai.get("recommend", []):
-        for n in dict.fromkeys(r.get("businesses", [])):  # once per answer
-            nn = ai_engines._norm(n)
-            is_self = ai_engines.name_in_text(own, nn) or (len(root) >= 4 and ai_engines._compact(nn) == root)
-            if nn and not is_self:
-                c[n] += 1
-    return c
-
-
 def _sources(ai, domain):
     c = collections.Counter()
     for r in ai.get("recommend", []):
@@ -182,8 +165,6 @@ def build_findings(name, domain, site, ai):
                 per.append(f"{L[e]}: הבדיקה נכשלה ({errs[0]['error'][:80]})")
         ok = [r for r in rec if not r["error"]]
         hits = sum(r["mentioned"] for r in ok)
-        comp = _competitors(ai, name, domain).most_common(8)
-        comp_items = [f"{n} — הופיע {_times(k)}" for n, k in comp]
         qs = " · ".join(f"„{q}”" for q in ai["questions"])
         zero_engines = [L[e] for e in ai["engines"]
                         if any(r["engine"] == e for r in ok) and not any(r["mentioned"] for r in ok if r["engine"] == e)]
@@ -199,11 +180,10 @@ def build_findings(name, domain, site, ai):
             title, level = "לא התקבלו תשובות מהמנועים", "warn"
         body = (f"שאלנו את השאלות שלקוח היה שואל: {qs}. כל שאלה הורצה {ai['runs']} פעמים בכל מנוע, "
                 f"כי התשובות משתנות בין הרצות.\n" + "\n".join(per))
-        if comp_items:
-            body += "\n\nבמקומך הופיעו:"
-        action = ("כדאי לבדוק מה יש לעסקים שהופיעו ואין לך: ביקורות, אזכורים באתרים שה-AI מצטט (בסעיף הבא) "
-                  "ועמודי שירות שמסבירים בבירור מה אתם עושים ואיפה.") if comp_items else ""
-        out.append(F(S1, title, body, action, VERIFIED, level, comp_items))
+        # No list of "competitors": the names in an answer are not necessarily competing with this business.
+        action = ("כדי להופיע ביותר תשובות: להופיע באתרים שה-AI מצטט (בסעיף הבא), לאסוף ביקורות, "
+                  "ולוודא שבאתר יש עמודי שירות שמסבירים בבירור מה אתם עושים ולמי.") if ok and hits < len(ok) else ""
+        out.append(F(S1, title, body, action, VERIFIED, level))
 
         # 2. knowledge
         for r in ai["knowledge"]:
@@ -304,12 +284,10 @@ def build_findings(name, domain, site, ai):
 def summarize(report):
     ai = report["ai"]
     ok = [r for r in ai.get("recommend", []) if not r["error"]]
-    comp = _competitors(ai, report["business"]["name"], report["business"]["domain"]).most_common(3) if ok else []
     blocked = [b["bot"] for b in report["site"]["robots"]["bots"] if b["kind"] == "search" and not b["allowed"]]
     return {
         "ai_answers": len(ok),
         "ai_mentions": sum(r["mentioned"] for r in ok),
-        "top_competitors": [n for n, _ in comp],
         "blocked_search_bots": blocked,
         "tags": [k for k, v in report["site"]["marketing"]["tags"].items() if v],
     }

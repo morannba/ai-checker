@@ -150,27 +150,6 @@ def ask(engine, question, city="", use_search=True):
 
 
 # --- helpers ----------------------------------------------------------------
-EXTRACT_PROMPT = (
-    "Below is an answer an AI assistant gave to a customer. List the businesses/brands it recommends or names "
-    "as options (not directories, review sites or the AI itself). Keep names exactly as written, in order of "
-    "appearance. Reply with JSON only: {{\"businesses\": [\"...\"]}}\n\nANSWER:\n{answer}"
-)
-
-
-def extract_businesses(answer, engine):
-    if not answer:
-        return []
-    res = ask(engine, EXTRACT_PROMPT.format(answer=answer[:6000]), use_search=False)
-    m = re.search(r"\{.*\}", res["text"] or "", re.S)
-    if not m:
-        return []
-    try:
-        names = json.loads(m.group(0)).get("businesses", [])
-    except (ValueError, AttributeError):
-        return []
-    return [n.strip() for n in names if isinstance(n, str) and n.strip()][:15]
-
-
 KNOW_PROMPT = (
     "Below is an AI assistant's answer to the question \"{question}\". Does the answer give concrete, specific "
     "information about this exact business (e.g. its services, location, people, reviews)? Saying it has no "
