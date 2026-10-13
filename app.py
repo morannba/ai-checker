@@ -6,10 +6,12 @@ import re
 import smtplib
 import threading
 import time
+import urllib.parse
 import uuid
 from email.message import EmailMessage
 
 import requests
+from bs4 import BeautifulSoup
 from flask import Flask, abort, jsonify, render_template, request
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -31,6 +33,7 @@ def load_env(path=os.path.join(BASE, ".env")):
 load_env()
 from checker.audit import audit  # noqa: E402  (after env is loaded)
 from checker.ai_engines import ENGINE_LABELS, _norm, enabled_engines  # noqa: E402
+from checker.fetch import decode, normalize_url, safe_get  # noqa: E402
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)  # links use https://our-domain behind Render
@@ -76,12 +79,33 @@ def client_ip():
 _audit_slots = threading.BoundedSemaphore(int(os.environ.get("MAX_CONCURRENT_AUDITS", "3")))
 
 
+EXTRA_FIELDS = ["site_platform", "ad_platforms", "ad_budget", "goal"]  # optional, asked while the check runs
+_extras, _saved = {}, {}  # lead_key -> answers given so far / -> the saved lead, for answers that come in late
+
+
+def _extra_values(p):
+    out = {}
+    for k in EXTRA_FIELDS:
+        v = p.get(k)
+        v = ", ".join(str(x) for x in v if x)[:200] if isinstance(v, list) else str(v or "").strip()[:200]
+        if v:
+            out[k] = v
+    return out
+
+
+def _prune(store, max_age=3 * 3600):
+    now = time.time()
+    for k in [k for k, v in store.items() if now - v["t"] > max_age]:
+        store.pop(k, None)
+
+
 LEAD_FIELDS = ["time", "report_id", "name", "email", "phone", "business_name", "business_type", "city", "scope", "url",
                "ad_platforms", "ad_budget", "site_platform", "goal", "ai_answers", "ai_mentions",
                "blocked_search_bots", "tags", "utm_source", "utm_campaign", "utm_content", "report_url"]
 
 
-def save_lead(row):
+def save_lead(row, update=False):
+    """update=True: extra answers for a lead already saved; written as another row with the same report_id."""
     new = not os.path.exists(LEADS_CSV)
     with open(LEADS_CSV, "a", newline="", encoding="utf-8-sig") as f:
         w = csv.DictWriter(f, fieldnames=LEAD_FIELDS, extrasaction="ignore")
@@ -90,7 +114,7 @@ def save_lead(row):
         w.writerow(row)
     if os.environ.get("LEAD_EMAIL_TO", "").strip():
         # in the background: a slow mail server shouldn't hold up the visitor's report
-        threading.Thread(target=email_lead, args=(row,), daemon=True).start()
+        threading.Thread(target=email_lead, args=(row, update), daemon=True).start()
     hook = os.environ.get("LEAD_WEBHOOK_URL", "").strip()  # e.g. a Make / Zapier webhook
     if hook:
         try:
@@ -115,11 +139,12 @@ LEAD_LABELS = [("name", "שם"), ("phone", "טלפון"), ("email", "מייל"),
 SCOPE_LABELS = {"local": "מהאזור", "israel": "מכל הארץ", "global": "גם מחו\"ל / אונליין"}
 
 
-def email_lead(row):
+def email_lead(row, update=False):
     """Send each lead by SMTP (e.g. Gmail with an app password). Settings in .env; failures only go to the log."""
     try:
         msg = EmailMessage()
-        msg["Subject"] = f"ליד חדש מבדיקת AI: {row.get('business_name', '')} ({row.get('ad_budget') or 'בלי תקציב'})"
+        head = "עוד פרטים לליד" if update else "ליד חדש מבדיקת AI"
+        msg["Subject"] = f"{head}: {row.get('business_name', '')} ({row.get('ad_budget') or 'בלי תקציב'})"
         msg["From"] = os.environ.get("SMTP_FROM") or os.environ["SMTP_USER"]
         msg["To"] = os.environ["LEAD_EMAIL_TO"]
         if row.get("email"):
@@ -169,24 +194,89 @@ def saved_report(rid):
     return render_template("index.html", **page_ctx(report))
 
 
+GENERIC_TITLE = re.compile(r"^(דף הבית|עמוד הבית|ראשי|בית|home|homepage|home page|welcome|ברוכים הבאים)$", re.I)
+
+
+def site_name_from_html(html, domain):
+    """Best guess at the business name: og:site_name, else the part of <title> that isn't 'Home' or a tagline."""
+    soup = BeautifulSoup(html, "html.parser")
+    og = soup.find("meta", attrs={"property": "og:site_name"})
+    if og and og.get("content", "").strip():
+        return og["content"].strip()[:80]
+    title = soup.title.get_text(" ", strip=True) if soup.title else ""
+    parts = [x.strip() for x in re.split(r"\s[|\-–—:·•]\s|\s?[|•·]\s?", title) if x.strip()]
+    parts = [x for x in parts if not GENERIC_TITLE.match(x)]
+    if not parts:
+        return ""
+    root = re.sub(r"[^a-z0-9]", "", domain.split(".")[0].lower())
+    for x in parts:  # the segment that matches the domain, e.g. "Growth With Moran" for growthwithmoran.com
+        if root and len(root) >= 4 and re.sub(r"[^a-z0-9]", "", x.lower()) == root:
+            return x[:80]
+    return min(parts, key=len)[:80] if len(parts) > 1 else parts[0][:80]
+
+
+@app.get("/api/site-name")
+def api_site_name():
+    """Prefills the business name from the site's title once the visitor types the address."""
+    if not _take([("name:" + client_ip(), int(os.environ.get("MAX_NAME_LOOKUPS", "40")))]):
+        return jsonify(name="")
+    try:
+        url = normalize_url(request.args.get("url", "")[:300])
+    except ValueError:
+        return jsonify(name="")
+    r = safe_get(url, max_bytes=400_000)
+    if r["error"] or not r["status"] or r["status"] >= 400:
+        return jsonify(name="")
+    domain = re.sub(r"^(www\.)?", "", (urllib.parse.urlparse(r["final_url"]).hostname or "").lower())
+    try:
+        return jsonify(name=site_name_from_html(decode(r["content"]), domain))
+    except Exception:
+        return jsonify(name="")
+
+
+@app.post("/api/extra")
+def api_extra():
+    """Optional questions answered on the waiting screen. Merged into the lead if it isn't saved yet,
+    otherwise sent as a follow-up so late answers aren't lost."""
+    p = request.get_json(silent=True) or {}
+    key = str(p.get("lead_key", ""))
+    if not re.fullmatch(r"[a-f0-9]{16,32}", key):
+        return jsonify(ok=False), 400
+    vals = _extra_values(p)
+    with _lock:
+        _prune(_extras), _prune(_saved)
+        _extras[key] = {"t": time.time(), "v": vals}
+        lead = _saved.get(key)
+    if lead and vals:
+        row = dict(lead["v"], **vals, time=datetime.datetime.now().isoformat(timespec="seconds"))
+        save_lead(row, update=True)
+    return jsonify(ok=True)
+
+
 @app.post("/api/audit")
 def api_audit():
     p = request.get_json(silent=True) or {}
     get = lambda k, n=200: str(p.get(k, "") or "").strip()[:n]  # noqa: E731
-    email = get("email")
+    email, phone = get("email"), get("phone", 40)
+    digits = re.sub(r"\D", "", phone)
+    # "step" tells the page which of its two steps holds the field to fix
     if not get("url") or not get("business_name") or not get("business_type"):
-        return jsonify(ok=False, error="יש למלא כתובת אתר, שם העסק ותחום."), 400
+        return jsonify(ok=False, step=1, error="יש למלא כתובת אתר, שם העסק ותחום."), 400
     if same_as_name(get("business_type"), get("business_name")):
         # the questions would contain the business name, so ChatGPT just echoes it back
-        return jsonify(ok=False, error="בשדה \"מה העסק עושה\" כתבו את התחום כמו שלקוח היה מחפש (למשל: יועץ שיווק דיגיטלי), ולא את שם העסק."), 400
+        return jsonify(ok=False, step=1, error="בשדה \"מה העסק עושה\" כתבו את התחום כמו שלקוח היה מחפש (למשל: יועץ שיווק דיגיטלי), ולא את שם העסק."), 400
     if get("scope") == "local" and not get("city"):
-        return jsonify(ok=False, error="כתבו באיזו עיר או אזור העסק פועל, או בחרו שהלקוחות מגיעים מכל הארץ."), 400
-    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
-        return jsonify(ok=False, error="יש להזין כתובת מייל תקינה."), 400
+        return jsonify(ok=False, step=1, error="כתבו באיזו עיר או אזור העסק פועל, או בחרו שהלקוחות מגיעים מכל הארץ."), 400
+    if not get("name"):
+        return jsonify(ok=False, step=2, error="כתבו את השם שלכם."), 400
+    if not 9 <= len(digits) <= 13:
+        return jsonify(ok=False, step=2, error="יש להזין מספר טלפון תקין."), 400
+    if email and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+        return jsonify(ok=False, step=2, error="כתובת המייל לא תקינה. אפשר גם להשאיר את השדה ריק."), 400
     domain = re.sub(r"^https?://(www\.)?", "", get("url").lower()).split("/")[0]
     taken = _take([("ip:" + client_ip(), int(os.environ.get("MAX_PER_IP", "3"))),
                    ("domain:" + domain, int(os.environ.get("MAX_PER_DOMAIN", "2"))),
-                   ("email:" + email.lower(), int(os.environ.get("MAX_PER_EMAIL", "2")))])
+                   ("phone:" + digits[-9:], int(os.environ.get("MAX_PER_PHONE", "2")))])
     if not taken:
         return jsonify(ok=False, error="הגעתם למספר הבדיקות היומי. נסו שוב מחר, או כתבו לנו."), 429
     if not _audit_slots.acquire(timeout=60):
@@ -211,17 +301,22 @@ def api_audit():
     with open(os.path.join(DATA, "reports", rid + ".json"), "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False)
     s = report["summary"]
-    save_lead({
+    row = {
         "time": report["generated_at"], "report_id": rid, "name": get("name"), "email": email,
-        "phone": get("phone", 40), "business_name": get("business_name"), "business_type": get("business_type"),
+        "phone": phone, "business_name": get("business_name"), "business_type": get("business_type"),
         "city": get("city"), "scope": report["business"]["scope"], "url": report["business"]["url"],
-        "ad_platforms": ", ".join(p.get("ad_platforms") or [])[:200] if isinstance(p.get("ad_platforms"), list) else get("ad_platforms"),
-        "ad_budget": get("ad_budget"), "site_platform": get("site_platform"), "goal": get("goal"),
         "ai_answers": s["ai_answers"], "ai_mentions": s["ai_mentions"],
         "blocked_search_bots": ", ".join(s["blocked_search_bots"]),
         "tags": ", ".join(s["tags"]), "utm_source": get("utm_source"), "utm_campaign": get("utm_campaign"),
         "utm_content": get("utm_content"), "report_url": request.host_url.rstrip("/") + "/r/" + rid,
-    })
+    }
+    key = str(p.get("lead_key", ""))
+    with _lock:
+        row.update(_extra_values(p))  # still accepted in the request itself
+        row.update((_extras.pop(key, None) or {}).get("v", {}))  # answered on the waiting screen
+        if re.fullmatch(r"[a-f0-9]{16,32}", key):
+            _saved[key] = {"t": time.time(), "v": row}
+    save_lead(row)
     return jsonify(ok=True, report=report)
 
 

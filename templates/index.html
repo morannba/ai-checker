@@ -26,7 +26,7 @@ input,select,textarea{width:100%;padding:12px;border:1px solid var(--fieldline);
 .checks input{width:auto}fieldset{border:0;padding:0;margin:0}
 button{margin-top:16px;width:100%;border:0;border-radius:12px;padding:15px;background:var(--accent);color:var(--on-accent);font:inherit;font-weight:700;font-size:17px;cursor:pointer}
 button:disabled{opacity:.6;cursor:wait}.note{font-size:13px;color:var(--muted);margin-top:10px}
-#status{margin:14px 0;font-weight:600}.error{background:var(--badbg);color:var(--bad);border-radius:10px;padding:12px}
+#status{margin:0 0 14px;font-weight:600}#errorBox{margin:14px 0}.error{background:var(--badbg);color:var(--bad);border-radius:10px;padding:12px}
 .summary{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}.pill{background:var(--pale);border-radius:999px;padding:6px 12px;font-size:14px}
 .section{margin:26px 0 8px;font-size:19px}
 .f{border-inline-start:5px solid var(--line)}.f.good{border-inline-start-color:var(--good)}.f.warn{border-inline-start-color:var(--warnstripe)}.f.bad{border-inline-start-color:var(--bad)}
@@ -40,6 +40,7 @@ footer{color:var(--muted);font-size:12px;margin-top:28px}
 .brand{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px;font-size:14px}
 .brand a{color:var(--accent);font-weight:700;text-decoration:none}.brand span{color:var(--muted)}
 a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.note a{color:var(--accent)}
 .opt{font-weight:400;color:var(--muted,#888);font-size:.85em}
 </style>
 {% if pixel_id %}
@@ -59,17 +60,41 @@ fbq('init', {{ pixel_id|tojson }}); fbq('track', 'PageView');
   <div class="eyebrow">בדיקה חינמית</div>
   <h1>מה ה-AI ממליץ ללקוחות שמחפשים עסק כמו שלך?</h1>
   <p class="sub">אנחנו שואלים את {{ engines|join(", ") if engines else "ChatGPT" }} את השאלות שלקוחות שואלים בתחום שלך, ומראים אם הוא ממליץ עליכם, מה הוא יודע על העסק ועל אילו אתרים הוא נשען. הבדיקה לוקחת כדקה.</p>
-  <form id="f">
+  <form id="f1">
     <div class="grid">
       <div class="full"><label for="url">כתובת האתר</label><input id="url" name="url" type="text" inputmode="url" placeholder="www.example.co.il" required></div>
-      <div><label for="business_name">שם העסק</label><input id="business_name" name="business_name" required></div>
+      <div class="full" id="nameBox" hidden><label for="business_name">שם העסק <span class="opt">(מילאנו מהאתר, אפשר לתקן)</span></label><input id="business_name" name="business_name"></div>
       <div><label for="business_type">מה העסק עושה (כמו שלקוח היה מחפש)</label><input id="business_type" name="business_type" placeholder="למשל: רואה חשבון, מרפאת שיניים, יועץ שיווק" required></div>
       <div><label for="scope">מאיפה מגיעים הלקוחות?</label>
         <select id="scope" name="scope" required><option value="israel">מכל הארץ</option><option value="local">מהאזור שלי</option><option value="global">גם מחו״ל / אונליין</option></select></div>
       <div id="cityBox" hidden><label for="city">עיר או אזור</label><input id="city" name="city" placeholder="למשל: חיפה, הקריות, השרון"></div>
-      <div><label for="site_platform">על מה האתר בנוי? <span class="opt">(לא חובה)</span></label>
+    </div>
+    <button id="next" type="submit">בדקו מה ה-AI אומר</button>
+    <p class="note">התשובות של AI משתנות מהרצה להרצה, ולכן כל שאלה נבדקת יותר מפעם אחת. לא ממציאים תוצאות: כל ממצא מגיע עם מה שנבדק בפועל.</p>
+  </form>
+  <form id="f2" hidden>
+    <h2>לאן לשלוח את התוצאות?</h2>
+    <p class="sub" id="checking"></p>
+    <div class="grid">
+      <div><label for="name">שם</label><input id="name" name="name" autocomplete="given-name" required></div>
+      <div><label for="phone">טלפון</label><input id="phone" name="phone" type="tel" autocomplete="tel" inputmode="tel" required></div>
+      <div class="full"><label for="email">מייל <span class="opt">(לא חובה)</span></label><input id="email" name="email" type="email" autocomplete="email"></div>
+    </div>
+    <button id="go" type="submit">הריצו את הבדיקה</button>
+    <p class="note"><a href="#" id="back">חזרה לפרטי העסק</a></p>
+  </form>
+</section>
+
+<section class="card" id="waitCard" hidden>
+  <div id="status" role="status" aria-live="polite"></div>
+  <form id="extra">
+    <h2>בזמן שאנחנו בודקים, ספרו לנו עוד <span class="opt">(לא חובה)</span></h2>
+    <div class="grid">
+      <div><label for="site_platform">על מה האתר בנוי?</label>
         <select id="site_platform" name="site_platform"><option value="">בחרו</option><option>וורדפרס</option><option>Wix</option><option>Shopify</option><option>אחר</option><option>לא יודע</option></select></div>
-      <fieldset class="full"><label>איפה אתם מפרסמים היום? <span class="opt">(לא חובה)</span></label>
+      <div><label for="ad_budget">תקציב פרסום חודשי</label>
+        <select id="ad_budget" name="ad_budget"><option value="">בחרו</option><option>עוד לא מפרסמים</option><option>עד ₪2,000</option><option>₪2,000–10,000</option><option>מעל ₪10,000</option></select></div>
+      <fieldset class="full"><label>איפה אתם מפרסמים היום?</label>
         <div class="checks">
           <label><input type="checkbox" name="ad_platforms" value="גוגל">גוגל</label>
           <label><input type="checkbox" name="ad_platforms" value="פייסבוק ואינסטגרם">פייסבוק ואינסטגרם</label>
@@ -77,20 +102,13 @@ fbq('init', {{ pixel_id|tojson }}); fbq('track', 'PageView');
           <label><input type="checkbox" name="ad_platforms" value="אחר">אחר</label>
           <label><input type="checkbox" name="ad_platforms" value="לא מפרסמים">לא מפרסמים</label>
         </div></fieldset>
-      <div><label for="ad_budget">תקציב פרסום חודשי <span class="opt">(לא חובה)</span></label>
-        <select id="ad_budget" name="ad_budget"><option value="">בחרו</option><option>עוד לא מפרסמים</option><option>עד ₪2,000</option><option>₪2,000–10,000</option><option>מעל ₪10,000</option></select></div>
-      <div><label for="goal">מה הכי חשוב לכם? <span class="opt">(לא חובה)</span></label>
+      <div class="full"><label for="goal">מה הכי חשוב לכם?</label>
         <select id="goal" name="goal"><option value="">בחרו</option><option>יותר לקוחות</option><option>פרסום שמשתלם</option><option>להופיע בגוגל וב-AI</option><option>לדעת מה עובד</option></select></div>
-      <div><label for="name">שם</label><input id="name" name="name" required></div>
-      <div><label for="phone">טלפון</label><input id="phone" name="phone" type="tel" required></div>
-      <div class="full"><label for="email">מייל</label><input id="email" name="email" type="email" required></div>
     </div>
-    <button id="go" type="submit">בדקו מה ה-AI אומר</button>
-    <p class="note">התשובות של AI משתנות מהרצה להרצה, ולכן כל שאלה נבדקת יותר מפעם אחת. לא ממציאים תוצאות: כל ממצא מגיע עם מה שנבדק בפועל.</p>
+    <p class="note" id="saved" aria-live="polite"></p>
   </form>
 </section>
-
-<div id="status" role="status" aria-live="polite"></div>
+<div id="errorBox" role="alert"></div>
 <section id="report"></section>
 <footer>הבדיקה מתבססת על תשובות AI ועל סריקה של עמוד הבית. היא לא מבטיחה תוצאה ולא מחליפה ייעוץ.</footer>
 </main>
@@ -101,33 +119,90 @@ const MORE = {{ more_engines|tojson }};
 const CTA_URL = {{ cta_url|tojson }}, CTA_TEXT = {{ cta_text|tojson }};
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const LABEL = {chatgpt:'ChatGPT', gemini:'Gemini', claude:'Claude'};
-const form = document.getElementById('f'), btn = document.getElementById('go'),
-      statusEl = document.getElementById('status'), out = document.getElementById('report');
+const f1 = document.getElementById('f1'), f2 = document.getElementById('f2'), extra = document.getElementById('extra'),
+      btn = document.getElementById('go'), statusEl = document.getElementById('status'), errorEl = document.getElementById('errorBox'),
+      waitCard = document.getElementById('waitCard'), formCard = document.getElementById('formCard'),
+      out = document.getElementById('report');
 const STEPS = ['שואלים את ה-AI את השאלות של הלקוחות שלך…','בודקים מי מופיע בתשובות…','בודקים אם הבוטים של AI יכולים להיכנס לאתר…','מכינים את הדוח…'];
+const LEAD_KEY = Array.from(crypto.getRandomValues(new Uint8Array(12)), x => x.toString(16).padStart(2, '0')).join('');
+const showError = msg => { errorEl.innerHTML = msg ? '<div class="error">' + esc(msg) + '</div>' : ''; };
 
 const scopeEl = document.getElementById('scope'), cityBox = document.getElementById('cityBox'), cityEl = document.getElementById('city');
 const syncCity = () => { const local = scopeEl.value === 'local'; cityBox.hidden = !local; cityEl.required = local; if (!local) cityEl.value = ''; };
 scopeEl.addEventListener('change', syncCity); syncCity();
 
-form.addEventListener('submit', async e => {
-  e.preventDefault();
-  const fd = new FormData(form), body = Object.fromEntries(fd.entries());
-  body.ad_platforms = fd.getAll('ad_platforms');
+// Business name: looked up from the site's title, shown prefilled so the visitor only fixes it if needed
+const urlEl = document.getElementById('url'), nameBox = document.getElementById('nameBox'), bizEl = document.getElementById('business_name');
+let looked = '', lookup = Promise.resolve(), nameEdited = false;
+bizEl.addEventListener('input', () => { nameEdited = true; });
+function lookupName() {
+  const u = urlEl.value.trim();
+  if (!u || u === looked) return lookup;
+  looked = u;
+  nameBox.hidden = false; bizEl.required = true;
+  if (!nameEdited) bizEl.placeholder = 'מחפשים את שם העסק באתר…';
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 8000);
+  lookup = fetch('/api/site-name?url=' + encodeURIComponent(u), {signal: ctl.signal})
+    .then(r => r.json()).then(d => { if (d.name && !nameEdited && looked === u) bizEl.value = d.name; })
+    .catch(() => {}).finally(() => { clearTimeout(timer); bizEl.placeholder = 'שם העסק'; });
+  return lookup;
+}
+urlEl.addEventListener('change', lookupName);
+
+function goStep(n) {
+  f1.hidden = n !== 1; f2.hidden = n !== 2;
+  if (n === 2) {
+    document.getElementById('checking').textContent = 'בודקים את ' + bizEl.value.trim() + '. התוצאות יופיעו כאן על המסך תוך כדקה–שתיים.';
+    document.getElementById('name').focus();
+  }
+  formCard.scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+document.getElementById('back').addEventListener('click', e => { e.preventDefault(); showError(''); goStep(1); });
+
+f1.addEventListener('submit', async e => {
+  e.preventDefault(); showError('');
+  if (!bizEl.value.trim()) {
+    const b = document.getElementById('next'); b.disabled = true;
+    await lookupName(); b.disabled = false;
+    if (!bizEl.value.trim()) { bizEl.focus(); f1.reportValidity(); return; }
+  }
+  goStep(2);
+});
+
+// Optional answers on the waiting screen: saved as they're picked, merged into the lead by LEAD_KEY
+let extraTimer = null;
+function sendExtra() {
+  clearTimeout(extraTimer); extraTimer = null;
+  const fd = new FormData(extra), body = Object.fromEntries(fd.entries());
+  body.ad_platforms = fd.getAll('ad_platforms'); body.lead_key = LEAD_KEY;
+  fetch('/api/extra', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body), keepalive: true})
+    .then(r => { if (r.ok) document.getElementById('saved').textContent = 'נשמר, תודה!'; }).catch(() => {});
+}
+extra.addEventListener('change', () => { clearTimeout(extraTimer); extraTimer = setTimeout(sendExtra, 1200); });
+
+f2.addEventListener('submit', async e => {
+  e.preventDefault(); showError('');
+  const body = Object.assign(Object.fromEntries(new FormData(f1).entries()), Object.fromEntries(new FormData(f2).entries()));
+  body.lead_key = LEAD_KEY;
   const qs = new URLSearchParams(location.search);
   ['utm_source','utm_campaign','utm_content'].forEach(k => body[k] = qs.get(k) || '');
   btn.disabled = true; out.innerHTML = '';
+  formCard.hidden = true; waitCard.hidden = false; waitCard.scrollIntoView({behavior: 'smooth', block: 'start'});
   let i = 0; statusEl.textContent = STEPS[0];
   const t = setInterval(() => { i = Math.min(i + 1, STEPS.length - 1); statusEl.textContent = STEPS[i]; }, 15000);
   try {
     const r = await fetch('/api/audit', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
     const data = await r.json();
-    if (!r.ok || !data.ok) throw new Error(data.error || 'הבדיקה נכשלה');
-    statusEl.textContent = '';
+    if (!r.ok || !data.ok) { const err = new Error(data.error || 'הבדיקה נכשלה'); err.step = data.step; throw err; }
+    if (extraTimer) sendExtra();  // an answer picked in the last second still reaches the lead
+    waitCard.hidden = true;
     render(data.report);
     track('Lead', {content_name: 'ai-check'}, data.report.id);
     history.replaceState(null, '', '/r/' + data.report.id);
   } catch (err) {
-    statusEl.innerHTML = '<div class="error">' + esc(err.message) + '</div>';
+    waitCard.hidden = true; formCard.hidden = false;
+    goStep(err.step === 1 ? 1 : 2);
+    showError(err.message);
   } finally { clearInterval(t); btn.disabled = false; }
 });
 
@@ -177,6 +252,6 @@ function render(r) {
   out.scrollIntoView({behavior: 'smooth'});
 }
 
-if (PRELOADED) { document.getElementById('formCard').style.display = 'none'; render(PRELOADED); }
+if (PRELOADED) { formCard.hidden = true; render(PRELOADED); }
 </script>
 </body></html>

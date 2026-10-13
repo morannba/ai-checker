@@ -137,16 +137,26 @@ if __name__ == "__main__":
     c = webapp.app.test_client()
     print("\nGET / ->", c.get("/").status_code)
     bad = c.post("/api/audit", json={"url": "x"})
-    print("missing fields ->", bad.status_code, bad.get_json()["error"])
-    ok = c.post("/api/audit", json={"url": f"http://127.0.0.1:{SSR_PORT}/", "business_name": "כהן ושות'",
-                                     "business_type": "רואה חשבון", "city": "חיפה", "email": "a@b.co",
-                                     "name": "דנה", "phone": "0501234567", "ad_platforms": ["גוגל"],
-                                     "ad_budget": "עד ₪2,000"}).get_json()
-    print("audit ->", ok["ok"], "engines:", ok["report"]["ai"]["engines"])
+    print("missing fields ->", bad.status_code, bad.get_json()["step"], bad.get_json()["error"])
+    site = f"http://127.0.0.1:{SSR_PORT}/"
+    step1 = {"url": site, "business_name": "כהן ושות'", "business_type": "רואה חשבון", "city": "חיפה"}
+    nophone = c.post("/api/audit", json=dict(step1, name="דנה"))
+    print("no phone ->", nophone.status_code, nophone.get_json()["step"], nophone.get_json()["error"])
+    badmail = c.post("/api/audit", json=dict(step1, name="דנה", phone="050-1234567", email="nope"))
+    print("bad optional email ->", badmail.status_code, badmail.get_json()["error"])
+    print("site name ->", c.get("/api/site-name?url=" + site).get_json())
+    print("site name, private host blocked ->", (os.environ.pop("ALLOW_PRIVATE_HOSTS"),
+          c.get("/api/site-name?url=http://127.0.0.1/").get_json(), os.environ.update(ALLOW_PRIVATE_HOSTS="1"))[1])
+    key = "ab" * 12
+    print("extra (before) ->", c.post("/api/extra", json={"lead_key": key, "ad_budget": "עד ₪2,000", "ad_platforms": ["גוגל"]}).status_code)
+    ok = c.post("/api/audit", json=dict(step1, name="דנה", phone="050-1234567", lead_key=key)).get_json()
+    print("audit, no email ->", ok["ok"], "engines:", ok["report"]["ai"]["engines"])
+    print("extra (late) ->", c.post("/api/extra", json={"lead_key": key, "ad_budget": "עד ₪2,000", "goal": "יותר לקוחות"}).status_code)
+    print("extra, bad key ->", c.post("/api/extra", json={"lead_key": "x"}).status_code)
     print("saved report page ->", c.get("/r/" + ok["report"]["id"]).status_code)
     print("leads.csv:\n" + open("/tmp/ai_checker_test_data/leads.csv", encoding="utf-8-sig").read())
     for _ in range(3):
-        last = c.post("/api/audit", json={"url": f"http://127.0.0.1:{SSR_PORT}/", "business_name": "a",
-                                           "business_type": "b", "email": "a@b.co"})
+        last = c.post("/api/audit", json={"url": site, "business_name": "a", "business_type": "b",
+                                           "name": "x", "phone": "0521111111"})
     print("rate limit ->", last.status_code)
     print("AI calls made:", len(AI.calls))
