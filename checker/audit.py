@@ -12,31 +12,47 @@ from .fetch import decode, normalize_url, safe_get
 VERIFIED, INFERRED, NOT_TESTED = "נבדק בפועל", "הערכה", "לא נבדק"
 
 
-def build_questions(business_type, city, custom=None):
+SCOPES = ("local", "israel", "global")  # where the business's customers come from
+
+
+def build_questions(business_type, city, custom=None, scope="local"):
     if custom:
         return [q.strip() for q in custom if q.strip()][:5]
     city = city.strip()
-    # "בחיפה", but "ב-Haifa": a Hebrew prefix glued to Latin letters reads as a typo
-    where = (f"ב{city}" if re.match(r"[\u0590-\u05ff]", city) else f"ב-{city}") if city else "בישראל"
+    if scope == "global":
+        where = ""  # online / B2B: customers search without a place
+    elif scope == "local" and city:
+        # "בחיפה", but "ב-Haifa": a Hebrew prefix glued to Latin letters reads as a typo
+        where = " " + (f"ב{city}" if re.match(r"[\u0590-\u05ff]", city) else f"ב-{city}")
+    else:
+        where = " בישראל"
     t = business_type.strip()
+    # phrased to read naturally for a profession ("רואה חשבון") and a service ("בניית אתרים") alike
     return [
-        f"אני מחפש {t} {where}. את מי כדאי לי לבדוק?",
-        f"מי ה{t} הכי מומלצים {where} והסביבה?",
-        f"תמליץ לי על {t} טוב {where}, עם כמה שמות ולמה.",
+        f"אני מחפש {t}{where}. את מי כדאי לי לבדוק?",
+        f"מה ההמלצות הכי טובות ל{t}{where}" + (" והסביבה?" if scope == "local" else "?"),
+        f"תן לי כמה שמות מומלצים ל{t}{where}, ולמה דווקא הם.",
     ]
+
+
+def resolve_scope(scope, city):
+    scope = scope if scope in SCOPES else ("local" if city.strip() else "israel")
+    return "israel" if scope == "local" and not city.strip() else scope
 
 
 def knowledge_question(name, domain):
     return f"מה אתה יודע על {name} ({domain})? מה הם עושים, איפה הם פועלים ומה אומרים עליהם?"
 
 
-def run_ai(name, domain, business_type, city, custom_questions=None, engines=None, runs=None):
+def run_ai(name, domain, business_type, city, custom_questions=None, engines=None, runs=None, scope="local"):
     available = ai_engines.enabled_engines()
     engines = [e for e in (engines or available) if e in available]
     if not engines:
         return {"engines": [], "skipped": "לא הוגדר מפתח API לאף מנוע AI"}
     runs = runs or int(os.environ.get("AI_RUNS", "2"))
-    questions = build_questions(business_type, city, custom_questions)
+    questions = build_questions(business_type, city, custom_questions, scope)
+    # where the search pretends the customer is: their city, anywhere in Israel, or nowhere in particular
+    location = city if scope == "local" else ("" if scope == "israel" else None)
     jobs = []  # (kind, engine, question)
     for e in engines:
         jobs.append(("knowledge", e, knowledge_question(name, domain)))
@@ -44,7 +60,7 @@ def run_ai(name, domain, business_type, city, custom_questions=None, engines=Non
             jobs += [("recommend", e, q)] * runs
     workers = int(os.environ.get("AI_CONCURRENCY", "6"))
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        results = list(pool.map(lambda j: (j[0], ai_engines.ask(j[1], j[2], city)), jobs))
+        results = list(pool.map(lambda j: (j[0], ai_engines.ask(j[1], j[2], location)), jobs))
 
     # extract named businesses from each recommendation answer (cheap, no search)
     rec = [r for k, r in results if k == "recommend"]
@@ -88,16 +104,19 @@ def run_site(page, business_name=""):
     }
 
 
-def audit(url, business_name, business_type, city="", custom_questions=None, engines=None, runs=None):
+def audit(url, business_name, business_type, city="", custom_questions=None, engines=None, runs=None, scope=None):
+    scope = resolve_scope(scope, city)
+    if scope != "local":
+        city = ""
     url = normalize_url(url)
     domain = urllib.parse.urlparse(url).hostname.removeprefix("www.")
     page = fetch_home(url)  # before any paid AI call: a typo in the URL should cost nothing
     with ThreadPoolExecutor(max_workers=2) as pool:
         f_site = pool.submit(run_site, page, business_name)
-        f_ai = pool.submit(run_ai, business_name, domain, business_type, city, custom_questions, engines, runs)
+        f_ai = pool.submit(run_ai, business_name, domain, business_type, city, custom_questions, engines, runs, scope)
         site, ai = f_site.result(), f_ai.result()
     report = {
-        "business": {"name": business_name, "type": business_type, "city": city, "url": url, "domain": domain},
+        "business": {"name": business_name, "type": business_type, "city": city, "scope": scope, "url": url, "domain": domain},
         "generated_at": datetime.datetime.now().astimezone().isoformat(timespec="minutes"),
         "findings": build_findings(business_name, domain, site, ai),
         "ai": ai,

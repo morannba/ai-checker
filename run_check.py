@@ -1,7 +1,7 @@
 """Run a full check from the command line (all engines with keys, not just the public ones).
 
 Usage:
-  python run_check.py <url> "<business name>" "<business type>" "<city>" [--engines chatgpt,gemini,claude] [--runs 3]
+  python run_check.py <url> "<business name>" "<business type>" "<city>" [--engines chatgpt,gemini,claude] [--runs 3] [--scope local|israel|global]
 
 Saves the report to data/reports/<id>.json. With the app running, open http://127.0.0.1:5000/r/<id>
 """
@@ -22,9 +22,11 @@ def main():
     p.add_argument("city", nargs="?", default="")
     p.add_argument("--engines", default="", help="comma list; default = all engines with a key")
     p.add_argument("--runs", type=int, default=None)
+    p.add_argument("--scope", choices=["local", "israel", "global"], default=None,
+                   help="where customers come from (default: local if a city is given, else israel)")
     a = p.parse_args()
     engines = [e.strip() for e in a.engines.split(",") if e.strip()] or None
-    report = audit(a.url, a.name, a.type, a.city, engines=engines, runs=a.runs)
+    report = audit(a.url, a.name, a.type, a.city, engines=engines, runs=a.runs, scope=a.scope)
     rid = uuid.uuid4().hex[:12]
     report["id"] = rid
     path = os.path.join(webapp.DATA, "reports", rid + ".json")

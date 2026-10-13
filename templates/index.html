@@ -13,6 +13,7 @@
 :root[data-theme="dark"]{--ink:#f3e9ee;--muted:#b9a7b2;--line:#3a2a34;--bg:#160d13;
  --card:#21141c;--field:#2a1a24;--fieldline:#4b3542;--accent:#d98bbd;--on-accent:#1a0a14;--pale:#3a1d2f;--answer:#e3d6dd;
  --good:#5fd394;--goodbg:#12301f;--warn:#f0b45a;--warnstripe:#f0b45a;--warnbg:#33240c;--bad:#ff8a7e;--badbg:#3a1714;color-scheme:dark}
+[hidden]{display:none!important}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;line-height:1.6}
 main{max-width:860px;margin:auto;padding:28px 16px 64px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px;margin-bottom:16px}
@@ -53,7 +54,9 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,su
       <div class="full"><label for="url">כתובת האתר</label><input id="url" name="url" type="text" inputmode="url" placeholder="www.example.co.il" required></div>
       <div><label for="business_name">שם העסק</label><input id="business_name" name="business_name" required></div>
       <div><label for="business_type">מה העסק עושה (כמו שלקוח היה מחפש)</label><input id="business_type" name="business_type" placeholder="למשל: רואה חשבון, מרפאת שיניים, יועץ שיווק" required></div>
-      <div><label for="city">עיר או אזור</label><input id="city" name="city" placeholder="למשל: חיפה"></div>
+      <div><label for="scope">מאיפה מגיעים הלקוחות?</label>
+        <select id="scope" name="scope" required><option value="israel">מכל הארץ</option><option value="local">מהאזור שלי</option><option value="global">גם מחו״ל / אונליין</option></select></div>
+      <div id="cityBox" hidden><label for="city">עיר או אזור</label><input id="city" name="city" placeholder="למשל: חיפה, הקריות, השרון"></div>
       <div><label for="site_platform">על מה האתר בנוי?</label>
         <select id="site_platform" name="site_platform"><option value="">בחרו</option><option>וורדפרס</option><option>Wix</option><option>Shopify</option><option>אחר</option><option>לא יודע</option></select></div>
       <fieldset class="full"><label>איפה אתם מפרסמים היום?</label>
@@ -91,6 +94,10 @@ const LABEL = {chatgpt:'ChatGPT', gemini:'Gemini', claude:'Claude'};
 const form = document.getElementById('f'), btn = document.getElementById('go'),
       statusEl = document.getElementById('status'), out = document.getElementById('report');
 const STEPS = ['שואלים את ה-AI את השאלות של הלקוחות שלך…','בודקים מי מופיע בתשובות…','בודקים אם הבוטים של AI יכולים להיכנס לאתר…','מכינים את הדוח…'];
+
+const scopeEl = document.getElementById('scope'), cityBox = document.getElementById('cityBox'), cityEl = document.getElementById('city');
+const syncCity = () => { const local = scopeEl.value === 'local'; cityBox.hidden = !local; cityEl.required = local; if (!local) cityEl.value = ''; };
+scopeEl.addEventListener('change', syncCity); syncCity();
 
 form.addEventListener('submit', async e => {
   e.preventDefault();

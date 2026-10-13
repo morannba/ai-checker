@@ -72,7 +72,7 @@ def client_ip():
 _audit_slots = threading.BoundedSemaphore(int(os.environ.get("MAX_CONCURRENT_AUDITS", "3")))
 
 
-LEAD_FIELDS = ["time", "report_id", "name", "email", "phone", "business_name", "business_type", "city", "url",
+LEAD_FIELDS = ["time", "report_id", "name", "email", "phone", "business_name", "business_type", "city", "scope", "url",
                "ad_platforms", "ad_budget", "site_platform", "goal", "ai_answers", "ai_mentions",
                "top_competitors", "blocked_search_bots", "tags", "utm_source", "utm_campaign", "utm_content"]
 
@@ -137,6 +137,8 @@ def api_audit():
     if same_as_name(get("business_type"), get("business_name")):
         # the questions would contain the business name, so ChatGPT just echoes it back
         return jsonify(ok=False, error="בשדה \"מה העסק עושה\" כתבו את התחום כמו שלקוח היה מחפש (למשל: יועץ שיווק דיגיטלי), ולא את שם העסק."), 400
+    if get("scope") == "local" and not get("city"):
+        return jsonify(ok=False, error="כתבו באיזו עיר או אזור העסק פועל, או בחרו שהלקוחות מגיעים מכל הארץ."), 400
     if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
         return jsonify(ok=False, error="יש להזין כתובת מייל תקינה."), 400
     domain = re.sub(r"^https?://(www\.)?", "", get("url").lower()).split("/")[0]
@@ -152,6 +154,7 @@ def api_audit():
     t0 = time.time()
     try:
         report = audit(get("url"), get("business_name"), get("business_type"), get("city"), custom or None,
+                       scope=get("scope") or None,
                        engines=public_engines() or ["none"])
     except ValueError as e:  # bad or unreachable URL: nothing was spent, so the check doesn't count
         _give_back(taken)
@@ -169,7 +172,7 @@ def api_audit():
     save_lead({
         "time": report["generated_at"], "report_id": rid, "name": get("name"), "email": email,
         "phone": get("phone", 40), "business_name": get("business_name"), "business_type": get("business_type"),
-        "city": get("city"), "url": report["business"]["url"],
+        "city": get("city"), "scope": report["business"]["scope"], "url": report["business"]["url"],
         "ad_platforms": ", ".join(p.get("ad_platforms") or [])[:200] if isinstance(p.get("ad_platforms"), list) else get("ad_platforms"),
         "ad_budget": get("ad_budget"), "site_platform": get("site_platform"), "goal": get("goal"),
         "ai_answers": s["ai_answers"], "ai_mentions": s["ai_mentions"],

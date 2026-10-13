@@ -52,9 +52,11 @@ def _ask_openai(question, city, use_search=True):
     last_err = None
     for tool_type in tool_types:
         if tool_type:
-            tool = {"type": tool_type, "user_location": {"type": "approximate", "country": "IL"}}
-            if city:
-                tool["user_location"]["city"] = city
+            tool = {"type": tool_type}
+            if city is not None:  # None = customers from anywhere, so no location hint
+                tool["user_location"] = {"type": "approximate", "country": "IL"}
+                if city:
+                    tool["user_location"]["city"] = city
             body["tools"] = [tool]
         r = requests.post(base + "/responses", headers=headers, json=body, timeout=TIMEOUT)
         if r.status_code == 400 and tool_type == "web_search":
@@ -107,11 +109,11 @@ def _ask_claude(question, city, use_search=True):
     body = {"model": _env("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001"), "max_tokens": 1500,
             "messages": [{"role": "user", "content": question}]}
     if use_search:
-        tool = {"type": _env("ANTHROPIC_SEARCH_TOOL", "web_search_20250305"), "name": "web_search",
-                "max_uses": 3, "user_location": {"type": "approximate", "country": "IL",
-                                                 "timezone": "Asia/Jerusalem"}}
-        if city:
-            tool["user_location"]["city"] = city
+        tool = {"type": _env("ANTHROPIC_SEARCH_TOOL", "web_search_20250305"), "name": "web_search", "max_uses": 3}
+        if city is not None:
+            tool["user_location"] = {"type": "approximate", "country": "IL", "timezone": "Asia/Jerusalem"}
+            if city:
+                tool["user_location"]["city"] = city
         body["tools"] = [tool]
     r = requests.post(base + "/v1/messages", json=body, timeout=TIMEOUT,
                       headers={"x-api-key": _env("ANTHROPIC_API_KEY"), "anthropic-version": "2023-06-01",
