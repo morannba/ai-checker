@@ -3,12 +3,15 @@ import datetime
 import json
 import os
 import re
+import smtplib
 import threading
 import time
 import uuid
+from email.message import EmailMessage
 
 import requests
 from flask import Flask, abort, jsonify, render_template, request
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 
@@ -30,6 +33,7 @@ from checker.audit import audit  # noqa: E402  (after env is loaded)
 from checker.ai_engines import ENGINE_LABELS, _norm, enabled_engines  # noqa: E402
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)  # links use https://our-domain behind Render
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024
 DATA = os.environ.get("DATA_DIR", os.path.join(BASE, "data"))
 os.makedirs(os.path.join(DATA, "reports"), exist_ok=True)
@@ -74,7 +78,7 @@ _audit_slots = threading.BoundedSemaphore(int(os.environ.get("MAX_CONCURRENT_AUD
 
 LEAD_FIELDS = ["time", "report_id", "name", "email", "phone", "business_name", "business_type", "city", "scope", "url",
                "ad_platforms", "ad_budget", "site_platform", "goal", "ai_answers", "ai_mentions",
-               "blocked_search_bots", "tags", "utm_source", "utm_campaign", "utm_content"]
+               "blocked_search_bots", "tags", "utm_source", "utm_campaign", "utm_content", "report_url"]
 
 
 def save_lead(row):
@@ -84,6 +88,9 @@ def save_lead(row):
         if new:
             w.writeheader()
         w.writerow(row)
+    if os.environ.get("LEAD_EMAIL_TO", "").strip():
+        # in the background: a slow mail server shouldn't hold up the visitor's report
+        threading.Thread(target=email_lead, args=(row,), daemon=True).start()
     hook = os.environ.get("LEAD_WEBHOOK_URL", "").strip()  # e.g. a Make / Zapier webhook
     if hook:
         try:
@@ -95,6 +102,39 @@ def save_lead(row):
 def same_as_name(business_type, business_name):
     t, n = _norm(business_type), _norm(business_name)
     return bool(t and n) and (n in t or t in n)
+
+
+LEAD_LABELS = [("name", "שם"), ("phone", "טלפון"), ("email", "מייל"), ("business_name", "עסק"), ("url", "אתר"),
+               ("business_type", "תחום"), ("scope", "לקוחות"), ("city", "עיר"), ("ad_budget", "תקציב פרסום"),
+               ("ad_platforms", "מפרסם ב"), ("site_platform", "האתר בנוי על"), ("goal", "מה הכי חשוב"),
+               ("ai_mentions", "הופעות ב-AI"), ("ai_answers", "מתוך תשובות"), ("blocked_search_bots", "בוטים חסומים"),
+               ("tags", "כלי מדידה"), ("utm_source", "utm_source"), ("utm_campaign", "utm_campaign"),
+               ("utm_content", "utm_content"), ("report_url", "הדוח")]
+
+
+SCOPE_LABELS = {"local": "מהאזור", "israel": "מכל הארץ", "global": "גם מחו\"ל / אונליין"}
+
+
+def email_lead(row):
+    """Send each lead by SMTP (e.g. Gmail with an app password). Settings in .env; failures only go to the log."""
+    try:
+        msg = EmailMessage()
+        msg["Subject"] = f"ליד חדש מבדיקת AI: {row.get('business_name', '')} ({row.get('ad_budget') or 'בלי תקציב'})"
+        msg["From"] = os.environ.get("SMTP_FROM") or os.environ["SMTP_USER"]
+        msg["To"] = os.environ["LEAD_EMAIL_TO"]
+        if row.get("email"):
+            msg["Reply-To"] = row["email"]
+        shown = dict(row, scope=SCOPE_LABELS.get(row.get("scope"), row.get("scope", "")))
+        msg.set_content("\n".join(f"{label}: {shown.get(k, '')}" for k, label in LEAD_LABELS if shown.get(k, "") != ""))
+        host, port = os.environ.get("SMTP_HOST", "smtp.gmail.com"), int(os.environ.get("SMTP_PORT", "465"))
+        smtp = smtplib.SMTP_SSL(host, port, timeout=20) if port == 465 else smtplib.SMTP(host, port, timeout=20)
+        with smtp:
+            if port != 465:
+                smtp.starttls()
+            smtp.login(os.environ["SMTP_USER"], os.environ["SMTP_PASS"])
+            smtp.send_message(msg)
+    except Exception:
+        app.logger.exception("lead email failed")
 
 
 def public_engines():
@@ -178,7 +218,7 @@ def api_audit():
         "ai_answers": s["ai_answers"], "ai_mentions": s["ai_mentions"],
         "blocked_search_bots": ", ".join(s["blocked_search_bots"]),
         "tags": ", ".join(s["tags"]), "utm_source": get("utm_source"), "utm_campaign": get("utm_campaign"),
-        "utm_content": get("utm_content"),
+        "utm_content": get("utm_content"), "report_url": request.host_url.rstrip("/") + "/r/" + rid,
     })
     return jsonify(ok=True, report=report)
 
