@@ -41,6 +41,15 @@ footer{color:var(--muted);font-size:12px;margin-top:28px}
 .brand a{color:var(--accent);font-weight:700;text-decoration:none}.brand span{color:var(--muted)}
 a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 </style>
+{% if pixel_id %}
+<script>
+!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;
+s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
+fbq('init', {{ pixel_id|tojson }}); fbq('track', 'PageView');
+</script>
+<noscript><img height="1" width="1" style="display:none" alt="" src="https://www.facebook.com/tr?id={{ pixel_id }}&ev=PageView&noscript=1"></noscript>
+{% endif %}
 </head>
 <body><main>
 <header class="brand"><a href="https://www.growthwithmoran.com/">Growth With Moran</a><span>בדיקת נראות ב-AI</span></header>
@@ -114,11 +123,18 @@ form.addEventListener('submit', async e => {
     if (!r.ok || !data.ok) throw new Error(data.error || 'הבדיקה נכשלה');
     statusEl.textContent = '';
     render(data.report);
+    track('Lead', {content_name: 'ai-check'}, data.report.id);
     history.replaceState(null, '', '/r/' + data.report.id);
   } catch (err) {
     statusEl.innerHTML = '<div class="error">' + esc(err.message) + '</div>';
   } finally { clearInterval(t); btn.disabled = false; }
 });
+
+// Meta pixel: Lead when a report is delivered, Contact on the CTA click. No-op without the pixel.
+function track(ev, params, id) {
+  try { if (window.fbq) fbq('track', ev, params || {}, id ? {eventID: ev + '-' + id} : undefined); } catch (e) {}
+}
+document.addEventListener('click', e => { if (e.target.closest('.cta a')) track('Contact', {content_name: 'ai-check-cta'}); });
 
 function finding(f) {
   return `<article class="card f ${esc(f.level)}"><div class="tag">${esc(f.status)}</div><h3>${esc(f.title)}</h3>

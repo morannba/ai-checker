@@ -147,7 +147,9 @@ def page_ctx(report=None):
     used = (report or {}).get("ai", {}).get("engines") or public_engines()
     more = [ENGINE_LABELS[e] for e in ENGINE_LABELS if e not in used]
     return {"report": report, "engines": [ENGINE_LABELS[e] for e in used], "more_engines": more,
-            "cta_url": os.environ.get("CTA_URL", ""), "cta_text": os.environ.get("CTA_TEXT", "לקביעת שיחה")}
+            "cta_url": os.environ.get("CTA_URL", ""), "cta_text": os.environ.get("CTA_TEXT", "לקביעת שיחה"),
+            # Growth With Moran's Meta pixel (public id); set META_PIXEL_ID="" to turn it off
+            "pixel_id": os.environ.get("META_PIXEL_ID", "824516214280119")}
 
 
 @app.get("/")
