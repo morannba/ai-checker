@@ -112,6 +112,7 @@ def run_site(page, business_name=""):
         "schema": site_signals.structured_data(raw_html),
         "llms_txt": site_signals.llms_txt(final_url),
         "marketing": site_signals.marketing(raw_html, rendered),
+        "seo": site_signals.seo_basics(raw_html, final_url),
         "rendered_ok": bool(rendered.get("ok")),
     }
 
@@ -155,7 +156,7 @@ def F(section, title, body, action="", status=VERIFIED, level="info", items=None
 def build_findings(name, domain, site, ai):
     out = []
     S1, S2 = "האם AI ממליץ עליך", "מה AI יודע על העסק"
-    S4, S5, S6 = "האם AI יכול להיכנס לאתר", "האם AI יכול לקרוא את האתר", "מדידה ופרסום"
+    S4, S5, S6 = "האם AI יכול להיכנס לאתר", "האם AI יכול לקרוא את האתר", "התמונה הדיגיטלית של העסק"
 
     # 1. recommendations
     if not ai.get("engines"):
@@ -274,18 +275,93 @@ def build_findings(name, domain, site, ai):
                  "" if sch["has_business_schema"] else "להוסיף סימון LocalBusiness עם הפרטים העדכניים. זה לא מבטיח הופעה, אבל מקטין טעויות.",
                  INFERRED, "info"))
 
-    # 6. marketing (short)
-    m = site["marketing"]
-    have = [k for k, v in m["tags"].items() if v]
-    missing = [k for k in ("Google Analytics 4", "פיקסל של מטא (פייסבוק)", "Google Ads (מעקב המרות)") if not m["tags"][k]]
+    # 6. digital stack: what is installed, and what it says about how the business markets itself
+    out += stack_findings(S6, site)
+    return out
+
+
+def stack_findings(section, site):
+    m, out = site["marketing"], []
+    tags, stack = m["tags"], m["stack"]
+    seen = VERIFIED if m["rendered"] else INFERRED
     c = m["contact"]
-    contact = [x for x, ok in (("כפתור וואטסאפ", c["whatsapp"]), ("קישור חיוג", c["phone_link"]), ("טופס", c["form"])) if ok]
-    body = ("מותקן: " + (", ".join(have) if have else "לא זיהינו כלי מדידה")) + "\n" + \
-           ("לא זיהינו: " + ", ".join(missing) if missing else "") + "\n" + \
-           ("דרכי פנייה בעמוד: " + (", ".join(contact) if contact else "לא נמצאו"))
-    out.append(F(S6, "כלי מדידה ופרסום באתר", body.strip(),
-                 "בלי מדידה אי אפשר לדעת מאיפה מגיעים לקוחות ואיזה פרסום מחזיר את הכסף." if missing else "",
-                 VERIFIED if m["rendered"] else INFERRED, "warn" if missing else "good"))
+    contact = [x for x, ok in (("כפתור וואטסאפ", c["whatsapp"]), ("קישור חיוג", c["phone_link"]), ("טופס", c["form"]),
+                               ("צ'אט", c["chat"])) if ok]
+    body = ("האתר בנוי על " + " / ".join(m["platform"]) + ". " if m["platform"] else "") + \
+           "דרכי פנייה בעמוד הבית: " + (", ".join(contact) if contact else "לא נמצאו")
+    grid = []
+    for g, tools in stack.items():
+        rows = [{"name": n, "ok": ok} for n, ok in tools.items()]
+        if g == "CRM ואוטומציה":  # a long column of ✗ says nothing: show what was found, or one line
+            rows = [r for r in rows if r["ok"]] or [{"name": "לא זוהה CRM או כלי אוטומציה", "ok": False}]
+        grid.append({"group": g, "rows": rows})
+    f = F(section, "מה מותקן באתר", body, status=seen, level="info")
+    f["grid"] = grid
+    out.append(f)
+
+    ads = [n for n, ok in stack["פרסום"].items() if ok]
+    crm = [n for n, ok in stack["CRM ואוטומציה"].items() if ok]
+    ga4, gtm = tags["Google Analytics 4"], tags["Google Tag Manager"]
+    if ads and not ga4:
+        out.append(F(section, "יש פיקסלים של פרסום, אבל אין Google Analytics",
+                     "זיהינו " + ", ".join(ads) + ", אבל לא Google Analytics 4. "
+                     "כל פלטפורמה מדווחת על עצמה, ואין מקום אחד שמראה מאיפה באמת מגיעים הלקוחות.",
+                     "להתקין GA4 (עדיף דרך Tag Manager) ולהגדיר בו את הפניות כהמרות.", seen, "bad"))
+    elif ga4 and not ads:
+        out.append(F(section, "יש מדידה, אבל אין פיקסל פרסום",
+                     "Google Analytics מותקן, אבל לא זיהינו פיקסל של מטא או של Google Ads. "
+                     "בלי פיקסל אי אפשר להחזיר בפרסום את מי שכבר ביקר באתר (רימרקטינג), "
+                     "ואי אפשר לתת למערכות הפרסום ללמוד מי הופך לליד.",
+                     "להתקין את הפיקסל של מטא ואת תג Google Ads עוד לפני שמתחילים לפרסם.", seen, "warn"))
+    elif ga4 and ads:
+        pass  # both measurement and ad pixels: nothing to flag here
+    elif gtm:
+        out.append(F(section, "יש Tag Manager, אבל לא זיהינו דרכו Analytics או פיקסל פרסום",
+                     "התשתית קיימת, אבל לא ראינו שהיא מפעילה Google Analytics 4, פיקסל של מטא או תג של Google Ads.",
+                     "לבדוק מה מוגדר ב-Tag Manager ולהוסיף בו GA4 ואת הפיקסלים של הפרסום.", seen, "warn"))
+    else:
+        out.append(F(section, "לא זיהינו באתר כלי מדידה או פרסום",
+                     "בלי מדידה אין דרך לדעת כמה אנשים נכנסים לאתר, מאיפה הם מגיעים ומה מביא פניות.",
+                     "להתחיל ב-Google Analytics 4 ו-Tag Manager. שניהם בחינם.", seen, "bad"))
+    if (ga4 or ads) and not gtm:
+        out.append(F(section, "התגים מותקנים בלי Tag Manager",
+                     "כל שינוי במדידה (אירוע חדש, פיקסל חדש) דורש כניסה לקוד של האתר.",
+                     "לרכז את כל התגים ב-Google Tag Manager, כדי לשנות מדידה בלי מתכנת.", seen, "info"))
+    if crm:
+        out.append(F(section, "האתר מחובר ל-CRM או לכלי אוטומציה",
+                     "זיהינו: " + ", ".join(crm) + ". כדאי לוודא שכל פנייה נכנסת אליו עם המקור שלה "
+                     "(גוגל, פייסבוק וכו'), כדי לדעת איזה ערוץ מביא לקוחות ולא רק לידים.", status=seen, level="good"))
+    else:
+        out.append(F(section, "לא זיהינו חיבור ל-CRM",
+                     "לא ראינו בעמוד הבית טופס או קוד של מערכת CRM או אוטומציה (HubSpot, monday, Fireberry, Zoho ועוד). "
+                     "ייתכן שיש חיבור בצד השרת שלא רואים מבחוץ.",
+                     "אם הפניות מגיעות רק למייל או לוואטסאפ, קל לאבד אותן ואי אפשר לדעת איזה ערוץ הביא לקוח. "
+                     "חיבור הטופס ל-CRM פותר את שני הדברים.", INFERRED, "warn"))
+
+    seo = site.get("seo")
+    if seo and not site.get("challenged"):
+        miss = []
+        if not seo["title"]:
+            miss.append("אין כותרת לעמוד (title)")
+        elif len(seo["title"]) < 15:
+            miss.append(f"הכותרת קצרה מאוד: „{seo['title']}”")
+        if not seo["description"]:
+            miss.append("אין תיאור לעמוד (meta description), אז גוגל יבחר טקסט בעצמו")
+        if seo["h1"] == 0:
+            miss.append("אין כותרת ראשית (H1) בעמוד")
+        elif seo["h1"] > 1:
+            miss.append(f"יש {seo['h1']} כותרות ראשיות (H1) במקום אחת")
+        if not seo["viewport"]:
+            miss.append("העמוד לא מוגדר לנייד (viewport)")
+        if not seo["sitemap"]:
+            miss.append("לא מצאנו sitemap.xml")
+        if miss:
+            out.append(F(section, "יסודות SEO בעמוד הבית: יש מה לתקן", "בדקנו את הבסיס שגוגל ומנועי AI מסתמכים עליו:",
+                         "אלה תיקונים קטנים שמשפיעים על איך האתר מופיע בגוגל ובתשובות AI.", VERIFIED,
+                         "warn", miss))
+        else:
+            out.append(F(section, "יסודות ה-SEO בעמוד הבית במקום",
+                         "יש כותרת, תיאור, כותרת ראשית אחת, התאמה לנייד ו-sitemap.", status=VERIFIED, level="good"))
     return out
 
 

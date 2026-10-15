@@ -13,6 +13,8 @@ sys.path.insert(0, ROOT)
 
 SITE_SSR = """<!doctype html><html lang="he"><head><title>כהן ושות' רואי חשבון</title>
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-ABC1234"></script>
+<script src="https://js.hs-scripts.com/123.js"></script>
+<meta name="viewport" content="width=device-width"><meta name="description" content="משרד רואי חשבון בחיפה">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"AccountingService","name":"כהן ושות'"}</script>
 </head><body><h1>כהן ושות' – רואי חשבון בחיפה</h1>
 <p>משרד רואי חשבון בחיפה. דוחות שנתיים, הנהלת חשבונות ומיסוי לעצמאים ולחברות קטנות. """ + "מילה " * 200 + """</p>
