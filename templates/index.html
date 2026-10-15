@@ -41,6 +41,10 @@ footer{color:var(--muted);font-size:12px;margin-top:28px}
 .brand a{color:var(--accent);font-weight:700;text-decoration:none}.brand span{color:var(--muted)}
 a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .note a{color:var(--accent)}
+.stack{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px}@media(max-width:620px){.stack{grid-template-columns:1fr}}
+.stack div{background:var(--bg);border-radius:10px;padding:10px 12px}.stack b{display:block;font-size:14px;margin-bottom:4px}
+.stack ul{list-style:none;padding:0;margin:0;font-size:14px}.stack li{display:flex;gap:6px}.stack .off{color:var(--muted)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 .opt{font-weight:400;color:var(--muted,#888);font-size:.85em}
 </style>
 {% if pixel_id %}
@@ -215,6 +219,8 @@ document.addEventListener('click', e => { if (e.target.closest('.cta a')) track(
 function finding(f) {
   return `<article class="card f ${esc(f.level)}"><div class="tag">${esc(f.status)}</div><h3>${esc(f.title)}</h3>
     ${f.body ? `<p>${esc(f.body)}</p>` : ''}
+    ${f.grid ? '<div class="stack">' + f.grid.map(g => `<div><b>${esc(g.group)}</b><ul>` + g.rows.map(x =>
+      `<li class="${x.ok ? '' : 'off'}"><span class="${x.ok ? 'yes' : 'no'}" aria-hidden="true">${x.ok ? '✓' : '✗'}</span>${esc(x.name)}<span class="sr">${x.ok ? ' (זוהה)' : ' (לא זוהה)'}</span></li>`).join('') + '</ul></div>').join('') + '</div>' : ''}
     ${f.items.length ? '<ul>' + f.items.map(x => `<li>${esc(x)}</li>`).join('') + '</ul>' : ''}
     ${f.action ? `<div class="action"><b>מה לעשות: </b>${esc(f.action)}</div>` : ''}</article>`;
 }
@@ -236,6 +242,7 @@ function render(r) {
     <h2>${esc(b.domain)}</h2><div class="tag">נוצר ${esc(r.generated_at)}</div>
     <div class="summary">
       <span class="pill">הופעת ב-${s.ai_mentions} מתוך ${s.ai_answers} תשובות AI</span>
+      <span class="pill">זיהינו באתר ${(s.tags || []).length} כלי שיווק ומדידה</span>
     </div></section>`;
   let last = '';
   for (const f of r.findings) {

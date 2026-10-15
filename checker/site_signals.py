@@ -71,19 +71,54 @@ def llms_txt(final_url):
     return bool(body) and not body.startswith(("<!doctype", "<html"))
 
 
-# --- marketing tags -------------------------------------------------------
-TAGS = {
-    "Google Analytics 4": [r"googletagmanager\.com/gtag/js\?id=G-", r"gtag\(\s*['\"]config['\"]\s*,\s*['\"]G-",
-                           r"google-analytics\.com/g/collect", r"analytics\.google\.com/g/collect"],
-    "Google Tag Manager": [r"googletagmanager\.com/gtm\.js", r"\bGTM-[A-Z0-9]{4,}"],
-    "Google Ads (מעקב המרות)": [r"googletagmanager\.com/gtag/js\?id=AW-", r"['\"]AW-\d{6,}",
-                                r"googleadservices\.com/pagead/conversion", r"googleads\.g\.doubleclick\.net"],
-    "פיקסל של מטא (פייסבוק)": [r"connect\.facebook\.net/[^\"']*/fbevents\.js", r"facebook\.com/tr[/?]",
-                               r"fbq\(\s*['\"]init"],
-    "פיקסל של טיקטוק": [r"analytics\.tiktok\.com"],
-    "LinkedIn Insight": [r"snap\.licdn\.com", r"px\.ads\.linkedin\.com"],
-    "Microsoft Clarity / Hotjar": [r"clarity\.ms", r"static\.hotjar\.com"],
+# --- digital stack: ads, measurement, CRM, site platform ------------------------
+# Detected from the page HTML and the requests the browser made. "Not found" only means we did not see it
+# on the homepage: a CRM can be connected on the server side, so the report words those as estimates.
+STACK = {
+    "פרסום": {
+        "פיקסל של מטא (פייסבוק)": [r"connect\.facebook\.net/[^\"']*/fbevents\.js", r"facebook\.com/tr[/?]",
+                                   r"fbq\(\s*['\"]init"],
+        "Google Ads (מעקב המרות)": [r"googletagmanager\.com/gtag/js\?id=AW-", r"['\"]AW-\d{6,}",
+                                    r"googleadservices\.com/pagead/conversion", r"googleads\.g\.doubleclick\.net"],
+        "LinkedIn Insight": [r"snap\.licdn\.com", r"px\.ads\.linkedin\.com"],
+        "פיקסל של טיקטוק": [r"analytics\.tiktok\.com"],
+        "Taboola / Outbrain": [r"cdn\.taboola\.com", r"trc\.taboola\.com", r"amplify\.outbrain\.com",
+                               r"widgets\.outbrain\.com"],
+    },
+    "מדידה": {
+        "Google Analytics 4": [r"googletagmanager\.com/gtag/js\?id=G-", r"gtag\(\s*['\"]config['\"]\s*,\s*['\"]G-",
+                               r"google-analytics\.com/g/collect", r"analytics\.google\.com/g/collect"],
+        "Google Tag Manager": [r"googletagmanager\.com/gtm\.js", r"\bGTM-[A-Z0-9]{4,}"],
+        "Microsoft Clarity / Hotjar": [r"clarity\.ms", r"static\.hotjar\.com"],
+    },
+    "CRM ואוטומציה": {
+        "HubSpot": [r"js\.hs-scripts\.com", r"js\.hsforms\.net", r"js\.hs-analytics\.net"],
+        "Salesforce / Pardot": [r"pi\.pardot\.com", r"go\.pardot\.com", r"webto\.salesforce"],
+        "Zoho": [r"salesiq\.zoho", r"zohopublic\.", r"crm\.zoho\.", r"forms\.zohopublic"],
+        "Fireberry / Powerlink": [r"fireberry\.com", r"powerlink\.co\.il"],
+        "monday.com": [r"forms\.monday\.com", r"wkf\.ms/"],
+        "Pipedrive": [r"pipedrivewebforms\.com", r"leadbooster-chat\.pipedrive", r"webforms\.pipedrive"],
+        "ActiveCampaign": [r"trackcmp\.net", r"\.activehosted\.com"],
+        "Mailchimp": [r"chimpstatic\.com", r"list-manage\.com"],
+        "Klaviyo": [r"static\.klaviyo\.com", r"klaviyo\.com/onsite"],
+    },
 }
+TAGS = {name: pats for group in STACK.values() for name, pats in group.items()}
+
+PLATFORMS = {
+    "WordPress": [r"/wp-content/", r"/wp-includes/"],
+    "Wix": [r"static\.wixstatic\.com", r"static\.parastorage\.com"],
+    "Shopify": [r"cdn\.shopify\.com"],
+    "Webflow": [r"assets\.website-files\.com", r"\bdata-wf-page\b"],
+    "Squarespace": [r"static1\.squarespace\.com"],
+    "SITE123": [r"site123\.me"],
+}
+CHAT = [r"code\.tidio\.co", r"widget\.intercom\.io", r"static\.zdassets\.com", r"embed\.tawk\.to",
+        r"client\.crisp\.chat"]
+
+
+def _found(pats, haystack):
+    return any(re.search(p, haystack, re.I) for p in pats)
 
 
 def marketing(raw_html, rendered):
@@ -91,12 +126,30 @@ def marketing(raw_html, rendered):
     if rendered.get("ok"):
         haystack += "\n" + rendered.get("html", "")
     haystack += "\n" + "\n".join(rendered.get("requests", []))
-    found = {name: any(re.search(p, haystack, re.I) for p in pats) for name, pats in TAGS.items()}
+    stack = {group: {name: _found(pats, haystack) for name, pats in tools.items()} for group, tools in STACK.items()}
+    found = {name: ok for group in stack.values() for name, ok in group.items()}
     soup = BeautifulSoup(rendered.get("html") or raw_html, "html.parser")
     hrefs = [a.get("href", "") for a in soup.find_all("a", href=True)]
     contact = {
         "whatsapp": any(re.search(r"(wa\.me/|api\.whatsapp\.com|whatsapp://)", h, re.I) for h in hrefs),
         "phone_link": any(h.lower().startswith("tel:") for h in hrefs),
         "form": bool(soup.find("form")),
+        "chat": _found(CHAT, haystack),
     }
-    return {"tags": found, "contact": contact, "rendered": bool(rendered.get("ok"))}
+    platform = [name for name, pats in PLATFORMS.items() if _found(pats, haystack)]
+    return {"tags": found, "stack": stack, "platform": platform, "contact": contact,
+            "rendered": bool(rendered.get("ok"))}
+
+
+# --- SEO basics ---------------------------------------------------------------
+def seo_basics(raw_html, final_url):
+    soup = BeautifulSoup(raw_html, "html.parser")
+    title = soup.title.get_text(" ", strip=True) if soup.title else ""
+    meta = soup.find("meta", attrs={"name": re.compile("^description$", re.I)})
+    desc = (meta.get("content") or "").strip() if meta else ""
+    h1 = [h.get_text(" ", strip=True) for h in soup.find_all("h1")]
+    viewport = bool(soup.find("meta", attrs={"name": re.compile("^viewport$", re.I)}))
+    res = safe_get(urllib.parse.urljoin(final_url, "/sitemap.xml"), max_bytes=200_000)
+    body = decode(res["content"]).lstrip().lower() if res["status"] == 200 else ""
+    sitemap = body.startswith("<?xml") or "<urlset" in body or "<sitemapindex" in body
+    return {"title": title, "description": desc, "h1": len(h1), "viewport": viewport, "sitemap": sitemap}
