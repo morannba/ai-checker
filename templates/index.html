@@ -35,7 +35,7 @@ button:disabled{opacity:.6;cursor:wait}.note{font-size:13px;color:var(--muted);m
 details{margin-top:8px}summary{cursor:pointer;color:var(--accent);font-weight:600}
 .ans{border-top:1px solid var(--line);padding:10px 0;font-size:14px}.ans .q{font-weight:700}.ans .t{white-space:pre-line;color:var(--answer)}
 .yes{color:var(--good);font-weight:700}.no{color:var(--bad);font-weight:700}.src{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
-.cta{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}.cta a{display:inline-block;margin-top:10px;background:var(--on-accent);color:var(--accent);padding:10px 16px;border-radius:10px;font-weight:700;text-decoration:none}
+.cta{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}.cta .eyebrow{color:var(--on-accent);opacity:.85}.cta a{display:inline-block;margin-top:10px;background:var(--on-accent);color:var(--accent);padding:10px 16px;border-radius:10px;font-weight:700;text-decoration:none}
 footer{color:var(--muted);font-size:12px;margin-top:28px}
 .brand{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px;font-size:14px}
 .brand a{color:var(--accent);font-weight:700;text-decoration:none}.brand span{color:var(--muted)}
@@ -230,6 +230,15 @@ function answers(ai) {
   return `<details class="card"><summary>כל התשובות המלאות (${ai.recommend.length + (ai.knowledge || []).length})</summary>${rows}</details>`;
 }
 
+// WhatsApp links get a prefilled message naming the business, the finding and the report link
+function ctaHref(r, top) {
+  if (!/wa\.me|whatsapp\.com/i.test(CTA_URL)) return CTA_URL;
+  const msg = `היי, עשיתי את בדיקת ה-AI ל-${r.business.name}` + (top ? ' ואשמח שתעזרו לי לתקן את מה שמצאתם.' : ' ואשמח לשמוע עוד.')
+    + `\nהדוח: ${location.origin}/r/${r.id}`;
+  // encodeURIComponent, not URLSearchParams: WhatsApp shows a "+" for spaces encoded that way
+  return CTA_URL + (CTA_URL.includes('?') ? '&' : '?') + 'text=' + encodeURIComponent(msg);
+}
+
 function render(r) {
   const s = r.summary, b = r.business;
   let html = `<section class="card"><div class="eyebrow">הדוח של ${esc(b.name)}</div>
@@ -243,11 +252,14 @@ function render(r) {
     html += finding(f);
   }
   html += answers(r.ai);
-  if (MORE.length) {
-    html += `<section class="card cta"><h2>רוצים לראות גם מה ${esc(MORE.join(' ו-'))} עונים?</h2>
-      <p>בשיחה קצרה נריץ את הבדיקה בכל המנועים, נעבור על הממצאים ונראה מה הכי שווה לתקן קודם.</p>
-      ${CTA_URL ? `<a href="${esc(CTA_URL)}" target="_blank" rel="noopener">${esc(CTA_TEXT)}</a>` : ''}</section>`;
-  }
+  // CTA built on the report's most urgent finding, so the follow-up is about their site, not a generic call
+  const top = r.findings.find(f => f.level === 'bad' && f.action) || r.findings.find(f => f.level === 'warn' && f.action);
+  const more = MORE.length ? ` נריץ גם את ${esc(MORE.join(' ו-'))} ונראה מה הכי שווה לתקן קודם.` : '';
+  html += `<section class="card cta">${top
+      ? `<div class="eyebrow">הדבר הראשון לתקן</div><h2>${esc(top.title)}</h2>
+         <p>אפשר לתקן את זה. שלחו לנו הודעה ונחזור עם מה בדיוק לשנות באתר.${more}</p>`
+      : `<h2>רוצים לשפר עוד?</h2><p>שלחו לנו הודעה ונעבור יחד על הממצאים.${more}</p>`}
+      ${CTA_URL ? `<a href="${esc(ctaHref(r, top))}" target="_blank" rel="noopener">${top ? 'רוצים שנתקן?' : esc(CTA_TEXT)}</a>` : ''}</section>`;
   out.innerHTML = html;
   out.scrollIntoView({behavior: 'smooth'});
 }
