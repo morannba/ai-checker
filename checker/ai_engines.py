@@ -177,6 +177,44 @@ def knows_business(answer, question, engine, domain="", site_text=""):
     return v if v in ("match", "other", "none") else "none"
 
 
+QUESTIONS_PROMPT = (
+    "Below is what a business's website says about itself.\n<site>\n{site}\n</site>\n\n"
+    "The business describes its field as: \"{business_type}\". {where}\n\n"
+    "Write {n} short questions in natural Hebrew that a potential customer would type into ChatGPT to find "
+    "a business like this one. Base them on what is specific to this site:\n"
+    "1. the most distinctive service or specialty the site offers (not just the general field);\n"
+    "2. the main service together with the city or area the site says it works in (if it names one).\n"
+    "Never include the business name, the domain, or any person's name: the customer does not know them yet.\n"
+    "Reply with JSON only: {{\"customer_questions\": [\"...\", \"...\"]}}"
+)
+
+
+def site_questions(engine, business_type, site_text, name="", domain="", scope="israel", n=2):
+    """Customer questions built from the site itself (its specialties and area), not only from the field name.
+    A specialist is found by what makes them special: a generic \"optometrist in Israel\" lists the big chains."""
+    if not site_text:
+        return []
+    where = {"global": "Its customers search online, from anywhere: do not add a place.",
+             "local": "Its customers come from its own area.",
+             }.get(scope, "Its customers come from all over Israel, but many still search near where it is.")
+    res = ask(engine, QUESTIONS_PROMPT.format(site=site_text[:2500], business_type=business_type, where=where, n=n),
+              use_search=False)
+    m = re.search(r"\{.*\}", res["text"] or "", re.S)
+    try:
+        qs = json.loads(m.group(0)).get("customer_questions") if m else None
+    except (ValueError, AttributeError):
+        qs = None
+    nm, root = _norm(name), _compact(domain_root(domain))
+    out = []
+    for q in qs if isinstance(qs, list) else []:
+        q = re.sub(r"\s+", " ", str(q)).strip()
+        # a question that names the business only tests whether ChatGPT can echo the name back
+        if not 8 <= len(q) <= 160 or name_in_text(nm, _norm(q)) or (len(root) >= 4 and root in _compact(q)):
+            continue
+        out.append(q)
+    return out[:n]
+
+
 def _norm(s):
     s = (s or "").lower()
     s = re.sub(r"בע[\"״']?מ|\bltd\.?|\binc\.?", " ", s)

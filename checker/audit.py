@@ -65,6 +65,10 @@ def run_ai(name, domain, business_type, city, custom_questions=None, engines=Non
         return {"engines": [], "skipped": "לא הוגדר מפתח API לאף מנוע AI"}
     runs = runs or int(os.environ.get("AI_RUNS", "2"))
     questions = build_questions(business_type, city, custom_questions, scope)
+    specific = [] if custom_questions else ai_engines.site_questions(
+        engines[0], business_type, site_text, name, domain, scope)
+    if specific:  # two general questions plus two about what this site offers, so the cost stays close
+        questions = [questions[0], questions[2]] + specific
     # where the search pretends the customer is: their city, anywhere in Israel, or nowhere in particular
     location = city if scope == "local" else ("" if scope == "israel" else None)
     jobs = []  # (kind, engine, question)
@@ -87,7 +91,8 @@ def run_ai(name, domain, business_type, city, custom_questions=None, engines=Non
         _, r["own_site_cited"] = ai_engines.is_mentioned(r, name, domain)
         r["identity"] = v  # "match" / "other" (describes a namesake) / "none"
         r["mentioned"] = v == "match" or (v != "other" and r["own_site_cited"])
-    return {"engines": engines, "questions": questions, "runs": runs, "recommend": rec, "knowledge": know}
+    return {"engines": engines, "questions": questions, "specific_questions": specific, "runs": runs,
+            "recommend": rec, "knowledge": know}
 
 
 def fetch_home(url):
@@ -177,8 +182,13 @@ def build_findings(name, domain, site, ai):
         qs = " · ".join(f"„{q}”" for q in ai["questions"])
         zero_engines = [L[e] for e in ai["engines"]
                         if any(r["engine"] == e for r in ok) and not any(r["mentioned"] for r in ok if r["engine"] == e)]
+        spec = set(ai.get("specific_questions") or [])
+        gen_hits = sum(r["mentioned"] for r in ok if r["question"] not in spec)
+        spec_hits = hits - gen_hits
         if ok and hits == 0:
             title, level = "AI לא המליץ עליך באף אחת מהתשובות שבדקנו", "bad"
+        elif ok and spec and gen_hits == 0:
+            title, level = "AI ממליץ עליך כששואלים על מה שמייחד אותך, אבל לא בשאלות הכלליות", "warn"
         elif ok and zero_engines:
             title, level = f"{' ו-'.join(zero_engines)} לא המליץ עליך באף תשובה", "warn"
         elif ok and hits <= len(ok) / 2:
@@ -189,6 +199,9 @@ def build_findings(name, domain, site, ai):
             title, level = "לא התקבלו תשובות מהמנועים", "warn"
         body = (f"שאלנו את השאלות שלקוח היה שואל: {qs}. כל שאלה הורצה {ai['runs']} פעמים בכל מנוע, "
                 f"כי התשובות משתנות בין הרצות.\n" + "\n".join(per))
+        if spec:
+            body += (f"\nבשאלות הכלליות על התחום: {gen_hits} הופעות. "
+                     f"בשאלות על השירותים והאזור שמופיעים באתר שלך: {spec_hits} הופעות.")
         # No list of "competitors": the names in an answer are not necessarily competing with this business.
         action = ("כדי להופיע ביותר תשובות: להופיע באתרים שמדברים על התחום שלכם (מדריכים, אינדקסים, כתבות), לאסוף ביקורות, "
                   "ולוודא שבאתר יש עמודי שירות שמסבירים בבירור מה אתם עושים ולמי.") if ok and hits < len(ok) else ""

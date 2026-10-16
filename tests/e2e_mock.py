@@ -69,7 +69,11 @@ class AI(BaseHTTPRequestHandler):
         AI.calls.append((self.path, body))
         if self.path.endswith("/responses"):  # OpenAI
             q = body["input"]
-            if "verdict" in q:
+            if "customer_questions" in q:  # site-based questions; the second names the business and is dropped
+                out = {"output": [{"type": "message", "content": [{"type": "output_text", "text": json.dumps(
+                       {"customer_questions": ["מי עושה דוחות שנתיים לעצמאים בחיפה?", "האם כהן ושות' טובים?"]},
+                       ensure_ascii=False)}]}]}
+            elif "verdict" in q:
                 out = {"output": [{"type": "message", "content": [{"type": "output_text", "text": '{"verdict": "none"}'}]}]}
             elif "JSON" in q:
                 out = {"output": [{"type": "message", "content": [{"type": "output_text",
@@ -124,6 +128,8 @@ if __name__ == "__main__":
     r1 = audit(f"http://127.0.0.1:{SSR_PORT}/", "כהן ושות'", "רואה חשבון", "חיפה", runs=2)
     print("== SSR site, all engines ==")
     print(json.dumps(r1["summary"], ensure_ascii=False))
+    print("questions:", r1["ai"]["questions"])
+    assert r1["ai"]["specific_questions"] == ["מי עושה דוחות שנתיים לעצמאים בחיפה?"], r1["ai"]["specific_questions"]
     for f in r1["findings"]:
         print(f"[{f['level']:4}] {f['section']} | {f['title']}")
         for it in f["items"]:
