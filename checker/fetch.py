@@ -28,13 +28,17 @@ def host_is_public(host):
         return False
     try:
         infos = socket.getaddrinfo(host, None)
-    except socket.gaierror:
+    except (socket.gaierror, UnicodeError):  # UnicodeError: host that can't be IDNA-encoded
         return False
     return all(ipaddress.ip_address(i[4][0]).is_global for i in infos)
 
 
+# zero-width and bidi marks that ride along when an address is copied from Hebrew text
+_INVISIBLE = re.compile("[\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff\\s]")
+
+
 def normalize_url(raw):
-    raw = (raw or "").strip()
+    raw = _INVISIBLE.sub("", raw or "")
     if not raw:
         raise ValueError("יש להזין כתובת אתר.")
     if not re.match(r"^https?://", raw, re.I):
@@ -44,6 +48,10 @@ def normalize_url(raw):
         raise ValueError("כתובת האתר לא תקינה.")
     if p.username or p.password:
         raise ValueError("כתובות עם שם משתמש או סיסמה לא נתמכות.")
+    try:
+        p.hostname.encode("idna")
+    except UnicodeError:  # e.g. a Hebrew letter typed next to the English address
+        raise ValueError("בכתובת האתר יש תו לא תקין (אולי אות בעברית). בדקו שהכתובת כתובה כולה באנגלית.") from None
     if not host_is_public(p.hostname):
         raise ValueError("אפשר לבדוק רק אתר ציבורי. בדקו שהכתובת נכונה.")
     return urllib.parse.urlunparse((p.scheme, p.netloc, p.path or "/", "", p.query, ""))
