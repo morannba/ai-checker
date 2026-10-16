@@ -6,6 +6,7 @@ Each engine is enabled only if its API key is set:
   ANTHROPIC_API_KEY  -> Claude (Messages API + web_search tool)
 Model names and base URLs can be overridden with env vars (see .env.example).
 """
+import html
 import json
 import os
 import re
@@ -229,6 +230,6 @@ _MD_LINK = re.compile(r"\[([^\]]+)\]\((?:https?://)[^)]*\)")  # "[text](https://
 
 def clean_text(text):
     """Remove inline citation links the engines put in the answer; sources are listed separately."""
-    text = _MD_LINK.sub(r"\1", _MD_CITE.sub("", text or ""))
+    text = _MD_LINK.sub(r"\1", _MD_CITE.sub("", html.unescape(text or "")))  # web results can carry "&#34;"
     text = re.sub(r"\*\*(.+?)\*\*|__(.+?)__", lambda m: m.group(1) or m.group(2), text)  # **bold**
     return re.sub(r"(?m)^#{1,6}\s+", "", text).strip()  # "## heading"
