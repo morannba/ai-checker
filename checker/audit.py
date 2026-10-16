@@ -1,4 +1,4 @@
-"""Runs all checks and turns them into a short, plain-Hebrew report (no overall score)."""
+"""Runs all checks and turns them into a short, plain-language report (no overall score), in Hebrew or English."""
 import datetime
 import os
 import re
@@ -7,19 +7,58 @@ from concurrent.futures import ThreadPoolExecutor
 
 from bs4 import BeautifulSoup
 
-from . import ai_access, ai_engines, render, site_signals
+from . import ai_access, ai_engines, render, report_en, site_signals
 from .fetch import decode, normalize_url, safe_get
 
 VERIFIED, INFERRED, NOT_TESTED = "נבדק בפועל", "הערכה", "לא נבדק"
+STATUS_EN = {VERIFIED: "Checked", INFERRED: "Estimate", NOT_TESTED: "Not checked"}
+LANGS = ("he", "en")
 
 
 SCOPES = ("local", "israel", "global")  # where the business's customers come from
 
 
-def build_questions(business_type, city, custom=None, scope="local"):
+# ccTLDs that are mostly used as generic domains, so they say nothing about where the business is
+_GENERIC_CC = {"io", "ai", "co", "me", "tv", "ly", "gg", "cc", "fm", "to", "so", "sh", "ws", "is", "eu", "app"}
+COUNTRY_EN = {"IL": "Israel", "GB": "the UK", "IE": "Ireland", "DE": "Germany", "NL": "the Netherlands",
+              "FR": "France", "ES": "Spain", "IT": "Italy", "BE": "Belgium", "AT": "Austria", "CH": "Switzerland",
+              "SE": "Sweden", "DK": "Denmark", "NO": "Norway", "FI": "Finland", "PT": "Portugal", "PL": "Poland",
+              "CZ": "the Czech Republic", "GR": "Greece", "US": "the US", "CA": "Canada", "AU": "Australia",
+              "NZ": "New Zealand"}
+
+
+def country_from_domain(domain):
+    """ISO country code guessed from the domain ending (example.co.uk -> GB), or None for .com and the like."""
+    tld = (domain or "").lower().rsplit(".", 1)[-1]
+    if len(tld) != 2 or tld in _GENERIC_CC:
+        return None
+    return "GB" if tld == "uk" else tld.upper()
+
+
+def build_questions_en(business_type, city, scope, country):
+    if scope == "local" and city:
+        where = f" in {city}"
+    elif scope == "israel" and country in COUNTRY_EN:  # "israel" = the whole country on the English page
+        where = f" in {COUNTRY_EN[country]}"
+    else:
+        where = ""
+    t = business_type.strip()
+    # phrased to work for a profession ("accountant") and a service ("web design") alike
+    plain = re.match(r"(a|an|the)\s", t, re.I) or t.lower().endswith(("s", "services", "design", "marketing"))
+    article = "" if plain else ("an " if t[:1].lower() in "aeiou" else "a ")
+    return [
+        f"I'm looking for {article}{t}{where}. Who should I check out?",
+        f"What are the best {t} options{where}?",
+        f"Can you name a few recommended {t} options{where}, and why those?",
+    ]
+
+
+def build_questions(business_type, city, custom=None, scope="local", lang="he", country=None):
     if custom:
         return [q.strip() for q in custom if q.strip()][:5]
     city = city.strip()
+    if lang == "en":
+        return build_questions_en(business_type, city, scope, country)
     if scope == "global":
         where = ""  # online / B2B: customers search without a place
     elif scope == "local" and city:
@@ -41,8 +80,13 @@ def resolve_scope(scope, city):
     return "israel" if scope == "local" and not city.strip() else scope
 
 
-def knowledge_question(name, domain):
+def knowledge_question(name, domain, lang="he"):
     # anchored to the site: a shared name must not pull in another business or person
+    if lang == "en":
+        return (f"What do you know about the business whose website is {domain} (business name: {name})? "
+                f"Answer only about the business of this website, and don't mix in information about other "
+                f"businesses or people with a similar name. What do they do, where do they operate and what do "
+                f"people say about them?")
     return (f"מה אתה יודע על העסק שהאתר שלו הוא {domain} (שם העסק: {name})? "
             f"ענה רק על העסק של האתר הזה, ואל תערבב מידע על עסקים או אנשים אחרים עם שם דומה. "
             f"מה הם עושים, איפה הם פועלים ומה אומרים עליהם?")
@@ -58,23 +102,28 @@ def site_summary(html):
 
 
 def run_ai(name, domain, business_type, city, custom_questions=None, engines=None, runs=None, scope="local",
-           site_text=""):
+           site_text="", lang="he"):
     available = ai_engines.enabled_engines()
     engines = [e for e in (engines or available) if e in available]
     if not engines:
-        return {"engines": [], "skipped": "לא הוגדר מפתח API לאף מנוע AI"}
+        return {"engines": [], "skipped": "No API key is set for any AI engine" if lang == "en"
+                else "לא הוגדר מפתח API לאף מנוע AI"}
     runs = runs or int(os.environ.get("AI_RUNS", "2"))
-    questions = build_questions(business_type, city, custom_questions, scope)
-    # where the search pretends the customer is: their city, anywhere in Israel, or nowhere in particular
+    # Hebrew page: customers are in Israel. English page: the country comes from the domain ending, if any.
+    country = country_from_domain(domain) if lang == "en" else "IL"
+    questions = build_questions(business_type, city, custom_questions, scope, lang, country)
+    # where the search pretends the customer is: their city, anywhere in the country, or nowhere in particular
     location = city if scope == "local" else ("" if scope == "israel" else None)
+    if location == "" and not country:
+        location = None  # "my country" on a .com site: no country to point the search at
     jobs = []  # (kind, engine, question)
     for e in engines:
-        jobs.append(("knowledge", e, knowledge_question(name, domain)))
+        jobs.append(("knowledge", e, knowledge_question(name, domain, lang)))
         for q in questions:
             jobs += [("recommend", e, q)] * runs
     workers = int(os.environ.get("AI_CONCURRENCY", "6"))
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        results = list(pool.map(lambda j: (j[0], ai_engines.ask(j[1], j[2], location)), jobs))
+        results = list(pool.map(lambda j: (j[0], ai_engines.ask(j[1], j[2], location, country=country)), jobs))
 
     rec = [r for k, r in results if k == "recommend"]
     for r in rec:
@@ -90,10 +139,11 @@ def run_ai(name, domain, business_type, city, custom_questions=None, engines=Non
     return {"engines": engines, "questions": questions, "runs": runs, "recommend": rec, "knowledge": know}
 
 
-def fetch_home(url):
+def fetch_home(url, lang="he"):
     page = safe_get(url)
     if page["error"] or page["status"] is None:
-        raise ValueError("לא הצלחנו להגיע לאתר. בדקו שהכתובת נכונה ושהאתר פעיל.")
+        raise ValueError("We couldn't reach the site. Check that the address is right and the site is up."
+                         if lang == "en" else "לא הצלחנו להגיע לאתר. בדקו שהכתובת נכונה ושהאתר פעיל.")
     return page
 
 
@@ -117,22 +167,25 @@ def run_site(page, business_name=""):
     }
 
 
-def audit(url, business_name, business_type, city="", custom_questions=None, engines=None, runs=None, scope=None):
+def audit(url, business_name, business_type, city="", custom_questions=None, engines=None, runs=None, scope=None,
+          lang="he"):
+    lang = lang if lang in LANGS else "he"
     scope = resolve_scope(scope, city)
     if scope != "local":
         city = ""
     url = normalize_url(url)
     domain = urllib.parse.urlparse(url).hostname.removeprefix("www.")
-    page = fetch_home(url)  # before any paid AI call: a typo in the URL should cost nothing
+    page = fetch_home(url, lang)  # before any paid AI call: a typo in the URL should cost nothing
     with ThreadPoolExecutor(max_workers=2) as pool:
         f_site = pool.submit(run_site, page, business_name)
         f_ai = pool.submit(run_ai, business_name, domain, business_type, city, custom_questions, engines, runs, scope,
-                           site_summary(decode(page["content"])))
+                           site_summary(decode(page["content"])), lang)
         site, ai = f_site.result(), f_ai.result()
     report = {
         "business": {"name": business_name, "type": business_type, "city": city, "scope": scope, "url": url, "domain": domain},
         "generated_at": datetime.datetime.now().astimezone().isoformat(timespec="minutes"),
-        "findings": build_findings(business_name, domain, site, ai),
+        "lang": lang,
+        "findings": build_findings(business_name, domain, site, ai, lang),
         "ai": ai,
         "site": site,
     }
@@ -153,7 +206,9 @@ def F(section, title, body, action="", status=VERIFIED, level="info", items=None
             "level": level, "items": items or []}
 
 
-def build_findings(name, domain, site, ai):
+def build_findings(name, domain, site, ai, lang="he"):
+    if lang == "en":
+        return report_en.build_findings(name, domain, site, ai)
     out = []
     S1, S2 = "האם AI ממליץ עליך", "מה AI יודע על העסק"
     S4, S5, S6 = "האם AI יכול להיכנס לאתר", "האם AI יכול לקרוא את האתר", "התמונה הדיגיטלית של העסק"

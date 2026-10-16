@@ -33,6 +33,15 @@ def host_is_public(host):
     return all(ipaddress.ip_address(i[4][0]).is_global for i in infos)
 
 
+# The same messages in English, for the English page (keyed by the Hebrew text raised below).
+ERRORS_EN = {
+    "יש להזין כתובת אתר.": "Please enter a website address.",
+    "כתובת האתר לא תקינה.": "That website address doesn't look right.",
+    "כתובות עם שם משתמש או סיסמה לא נתמכות.": "Addresses with a username or password aren't supported.",
+    "אפשר לבדוק רק אתר ציבורי. בדקו שהכתובת נכונה.": "We can only check a public website. Please check the address.",
+}
+
+
 def normalize_url(raw):
     raw = (raw or "").strip()
     if not raw:
