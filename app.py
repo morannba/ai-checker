@@ -33,7 +33,7 @@ def load_env(path=os.path.join(BASE, ".env")):
 load_env()
 from checker.audit import audit  # noqa: E402  (after env is loaded)
 from checker.ai_engines import ENGINE_LABELS, _norm, enabled_engines  # noqa: E402
-from checker.fetch import decode, normalize_url, safe_get  # noqa: E402
+from checker.fetch import ERRORS_EN, decode, normalize_url, safe_get  # noqa: E402
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)  # links use https://our-domain behind Render
@@ -133,7 +133,7 @@ LEAD_LABELS = [("name", "שם"), ("phone", "טלפון"), ("email", "מייל"),
                ("ad_platforms", "מפרסם ב"), ("site_platform", "האתר בנוי על"), ("goal", "מה הכי חשוב"),
                ("ai_mentions", "הופעות ב-AI"), ("ai_answers", "מתוך תשובות"), ("blocked_search_bots", "בוטים חסומים"),
                ("tags", "כלי מדידה"), ("utm_source", "utm_source"), ("utm_campaign", "utm_campaign"),
-               ("utm_content", "utm_content"), ("report_url", "הדוח")]
+               ("utm_content", "utm_content"), ("lang", "שפת הבדיקה"), ("report_url", "הדוח")]
 
 
 SCOPE_LABELS = {"local": "מהאזור", "israel": "מכל הארץ", "global": "גם מחו\"ל / אונליין"}
@@ -144,6 +144,8 @@ def email_lead(row, update=False):
     try:
         msg = EmailMessage()
         head = "עוד פרטים לליד" if update else "ליד חדש מבדיקת AI"
+        if row.get("lang") == "en":
+            head += " (אנגלית)"
         msg["Subject"] = f"{head}: {row.get('business_name', '')} ({row.get('ad_budget') or 'בלי תקציב'})"
         msg["From"] = os.environ.get("SMTP_FROM") or os.environ["SMTP_USER"]
         msg["To"] = os.environ["LEAD_EMAIL_TO"]
@@ -168,18 +170,31 @@ def public_engines():
     return [e for e in enabled_engines() if e in wanted]
 
 
-def page_ctx(report=None):
+def page_ctx(report=None, lang="he"):
     used = (report or {}).get("ai", {}).get("engines") or public_engines()
     more = [ENGINE_LABELS[e] for e in ENGINE_LABELS if e not in used]
+    if lang == "en":  # the Hebrew CTA link may carry a Hebrew WhatsApp message, so English has its own
+        cta_url = os.environ.get("CTA_URL_EN") or os.environ.get("CTA_URL", "")
+        cta_text = os.environ.get("CTA_TEXT_EN", "Book a call")
+    else:
+        cta_url, cta_text = os.environ.get("CTA_URL", ""), os.environ.get("CTA_TEXT", "לקביעת שיחה")
     return {"report": report, "engines": [ENGINE_LABELS[e] for e in used], "more_engines": more,
-            "cta_url": os.environ.get("CTA_URL", ""), "cta_text": os.environ.get("CTA_TEXT", "לקביעת שיחה"),
+            "cta_url": cta_url, "cta_text": cta_text,
             # Growth With Moran's Meta pixel (public id); set META_PIXEL_ID="" to turn it off
             "pixel_id": os.environ.get("META_PIXEL_ID", "824516214280119")}
+
+
+TEMPLATES = {"he": "index.html", "en": "index_en.html"}
 
 
 @app.get("/")
 def index():
     return render_template("index.html", **page_ctx())
+
+
+@app.get("/en")
+def index_en():
+    return render_template("index_en.html", **page_ctx(lang="en"))
 
 
 @app.get("/r/<rid>")
@@ -191,7 +206,8 @@ def saved_report(rid):
         abort(404)
     with open(path, encoding="utf-8") as f:
         report = json.load(f)
-    return render_template("index.html", **page_ctx(report))
+    lang = report.get("lang") if report.get("lang") in TEMPLATES else "he"
+    return render_template(TEMPLATES[lang], **page_ctx(report, lang))
 
 
 GENERIC_TITLE = re.compile(r"^(דף הבית|עמוד הבית|ראשי|בית|home|homepage|home page|welcome|ברוכים הבאים)$", re.I)
@@ -259,41 +275,52 @@ def api_audit():
     get = lambda k, n=200: str(p.get(k, "") or "").strip()[:n]  # noqa: E731
     email, phone = get("email"), get("phone", 40)
     digits = re.sub(r"\D", "", phone)
+    lang = "en" if get("lang") == "en" else "he"
+    tr = lambda he, en: en if lang == "en" else he  # noqa: E731
     # "step" tells the page which of its two steps holds the field to fix
     if not get("url") or not get("business_name") or not get("business_type"):
-        return jsonify(ok=False, step=1, error="יש למלא כתובת אתר, שם העסק ותחום."), 400
+        return jsonify(ok=False, step=1, error=tr("יש למלא כתובת אתר, שם העסק ותחום.",
+                                                  "Please fill in the website, business name and what you do.")), 400
     if same_as_name(get("business_type"), get("business_name")):
         # the questions would contain the business name, so ChatGPT just echoes it back
-        return jsonify(ok=False, step=1, error="בשדה \"מה העסק עושה\" כתבו את התחום כמו שלקוח היה מחפש (למשל: יועץ שיווק דיגיטלי), ולא את שם העסק."), 400
+        return jsonify(ok=False, step=1, error=tr(
+            "בשדה \"מה העסק עושה\" כתבו את התחום כמו שלקוח היה מחפש (למשל: יועץ שיווק דיגיטלי), ולא את שם העסק.",
+            "In \"What does the business do\", write your field the way a customer would search for it "
+            "(for example: digital marketing consultant), not the business name.")), 400
     if get("scope") == "local" and not get("city"):
-        return jsonify(ok=False, step=1, error="כתבו באיזו עיר או אזור העסק פועל, או בחרו שהלקוחות מגיעים מכל הארץ."), 400
+        return jsonify(ok=False, step=1, error=tr("כתבו באיזו עיר או אזור העסק פועל, או בחרו שהלקוחות מגיעים מכל הארץ.",
+                                                  "Write the city or area you work in, or choose another option.")), 400
     if not get("name"):
-        return jsonify(ok=False, step=2, error="כתבו את השם שלכם."), 400
-    if not 9 <= len(digits) <= 13:
-        return jsonify(ok=False, step=2, error="יש להזין מספר טלפון תקין."), 400
+        return jsonify(ok=False, step=2, error=tr("כתבו את השם שלכם.", "Please write your name.")), 400
+    if not ((7 <= len(digits) <= 15) if lang == "en" else (9 <= len(digits) <= 13)):  # international on English
+        return jsonify(ok=False, step=2, error=tr("יש להזין מספר טלפון תקין.", "Please enter a valid phone number.")), 400
     if email and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
-        return jsonify(ok=False, step=2, error="כתובת המייל לא תקינה. אפשר גם להשאיר את השדה ריק."), 400
+        return jsonify(ok=False, step=2, error=tr("כתובת המייל לא תקינה. אפשר גם להשאיר את השדה ריק.",
+                                                  "That email address doesn't look right. You can also leave it empty.")), 400
     domain = re.sub(r"^https?://(www\.)?", "", get("url").lower()).split("/")[0]
     taken = _take([("ip:" + client_ip(), int(os.environ.get("MAX_PER_IP", "3"))),
                    ("domain:" + domain, int(os.environ.get("MAX_PER_DOMAIN", "2"))),
                    ("phone:" + digits[-9:], int(os.environ.get("MAX_PER_PHONE", "2")))])
     if not taken:
-        return jsonify(ok=False, error="הגעתם למספר הבדיקות היומי. נסו שוב מחר, או כתבו לנו."), 429
+        return jsonify(ok=False, error=tr("הגעתם למספר הבדיקות היומי. נסו שוב מחר, או כתבו לנו.",
+                                          "You've reached today's limit of checks. Try again tomorrow, or write to us.")), 429
     if not _audit_slots.acquire(timeout=60):
         _give_back(taken)
-        return jsonify(ok=False, error="יש כרגע הרבה בדיקות במקביל. נסו שוב בעוד דקה."), 503
+        return jsonify(ok=False, error=tr("יש כרגע הרבה בדיקות במקביל. נסו שוב בעוד דקה.",
+                                          "A lot of checks are running right now. Try again in a minute.")), 503
     custom = [q for q in get("custom_questions", 1000).splitlines() if q.strip()]
     t0 = time.time()
     try:
         report = audit(get("url"), get("business_name"), get("business_type"), get("city"), custom or None,
                        scope=get("scope") or None,
-                       engines=public_engines() or ["none"])
+                       engines=public_engines() or ["none"], lang=lang)
     except ValueError as e:  # bad or unreachable URL: nothing was spent, so the check doesn't count
         _give_back(taken)
-        return jsonify(ok=False, error=str(e)), 400
+        return jsonify(ok=False, error=tr(str(e), ERRORS_EN.get(str(e), str(e)))), 400
     except Exception:  # keep the user-facing message simple
         app.logger.exception("audit failed")
-        return jsonify(ok=False, error="הבדיקה נכשלה. נסו שוב בעוד כמה דקות."), 500
+        return jsonify(ok=False, error=tr("הבדיקה נכשלה. נסו שוב בעוד כמה דקות.",
+                                          "The check failed. Please try again in a few minutes.")), 500
     finally:
         _audit_slots.release()
     rid = uuid.uuid4().hex[:12]
@@ -308,7 +335,7 @@ def api_audit():
         "ai_answers": s["ai_answers"], "ai_mentions": s["ai_mentions"],
         "blocked_search_bots": ", ".join(s["blocked_search_bots"]),
         "tags": ", ".join(s["tags"]), "utm_source": get("utm_source"), "utm_campaign": get("utm_campaign"),
-        "utm_content": get("utm_content"), "report_url": request.host_url.rstrip("/") + "/r/" + rid,
+        "utm_content": get("utm_content"), "lang": "en" if lang == "en" else "", "report_url": request.host_url.rstrip("/") + "/r/" + rid,
     }
     key = str(p.get("lead_key", ""))
     with _lock:

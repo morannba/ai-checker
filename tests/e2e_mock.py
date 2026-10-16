@@ -157,6 +157,19 @@ if __name__ == "__main__":
     print("extra, bad key ->", c.post("/api/extra", json={"lead_key": "x"}).status_code)
     print("saved report page ->", c.get("/r/" + ok["report"]["id"]).status_code)
     print("leads.csv:\n" + open("/tmp/ai_checker_test_data/leads.csv", encoding="utf-8-sig").read())
+    # English page: questions, report and errors in English, and no Israel location for a .com-like site
+    print("\nGET /en ->", c.get("/en").status_code)
+    jsite = f"http://127.0.0.1:{JS_PORT}/"
+    en1 = {"url": jsite, "business_name": "Levi Dental", "business_type": "dentist", "scope": "israel", "lang": "en"}
+    print("en, no phone ->", c.post("/api/audit", json=dict(en1, name="Dana")).get_json()["error"])
+    n0 = len(AI.calls)
+    en = c.post("/api/audit", json=dict(en1, name="Dana", phone="+44 7911 123456")).get_json()
+    print("en audit ->", en["ok"], en["report"]["lang"], en["report"]["ai"]["questions"][0])
+    print("en location ->", {json.dumps(b.get("tools", [{}])[0].get("user_location")) for _, b in AI.calls[n0:]})
+    for f in en["report"]["findings"]:
+        print(f"[{f['level']:4}] {f['status']:11} {f['section']} | {f['title']}")
+    page = c.get("/r/" + en["report"]["id"]).get_data(as_text=True)
+    print("en saved report page ->", 'lang="en"' in page)
     for _ in range(3):
         last = c.post("/api/audit", json={"url": site, "business_name": "a", "business_type": "b",
                                            "name": "x", "phone": "0521111111"})

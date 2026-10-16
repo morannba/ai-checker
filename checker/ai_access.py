@@ -19,6 +19,15 @@ AI_BOTS = [
     ("bingbot", "Microsoft", "חיפוש Bing ו-Copilot", "search"),
 ]
 
+PURPOSE_EN = {
+    "OAI-SearchBot": "search inside ChatGPT", "ChatGPT-User": "ChatGPT visits the site during a chat",
+    "GPTBot": "model training", "Claude-SearchBot": "search inside Claude",
+    "Claude-User": "Claude visits the site during a chat", "ClaudeBot": "model training",
+    "PerplexityBot": "Perplexity search", "Perplexity-User": "Perplexity visits the site during a chat",
+    "Googlebot": "Google Search and AI Overviews", "Google-Extended": "content use for Gemini",
+    "bingbot": "Bing search and Copilot",
+}
+
 # Full user-agent strings used for the live probe (as published by each company).
 PROBE_UAS = {
     "GPTBot": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.1; +https://openai.com/gptbot)",
@@ -53,7 +62,8 @@ def check_robots(final_url):
     path = urllib.parse.urlparse(final_url).path or "/"
     for token, company, purpose, kind in AI_BOTS:
         allowed = rp.can_fetch(token, path)
-        out["bots"].append({"bot": token, "company": company, "purpose": purpose, "kind": kind,
+        out["bots"].append({"bot": token, "company": company, "purpose": purpose,
+                            "purpose_en": PURPOSE_EN.get(token, purpose), "kind": kind,
                             "allowed": allowed})
     return out
 
