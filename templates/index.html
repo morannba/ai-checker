@@ -46,6 +46,13 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,su
 .stack ul{list-style:none;padding:0;margin:0;font-size:14px}.stack li{display:flex;gap:6px}.stack .off{color:var(--muted)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 .opt{font-weight:400;color:var(--muted,#888);font-size:.85em}
+.loading{display:flex;align-items:center;gap:12px}.loading #status{margin:0}
+.spin{flex:none;width:26px;height:26px;border:3px solid var(--pale);border-top-color:var(--accent);border-radius:50%;animation:spin .9s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.bar{height:10px;background:var(--pale);border-radius:999px;overflow:hidden;margin:14px 0 6px}
+.bar i{display:block;height:100%;width:2%;background:var(--accent);border-radius:999px;transition:width .5s ease}
+.waitnote{margin:0 0 20px;padding-bottom:18px;border-bottom:1px solid var(--line)}
+@media (prefers-reduced-motion: reduce){.spin{animation-duration:3s}.bar i{transition:none}}
 </style>
 {% if pixel_id %}
 <script>
@@ -90,7 +97,9 @@ fbq('init', {{ pixel_id|tojson }}); fbq('track', 'PageView');
 </section>
 
 <section class="card" id="waitCard" hidden>
-  <div id="status" role="status" aria-live="polite"></div>
+  <div class="loading"><span class="spin" aria-hidden="true"></span><div id="status" role="status" aria-live="polite"></div></div>
+  <div class="bar" aria-hidden="true"><i id="bar"></i></div>
+  <p class="note waitnote">הבדיקה לוקחת עד 2 דקות. אפשר להשאיר את הדף פתוח, והדוח יופיע כאן.</p>
   <form id="extra">
     <h2>בזמן שאנחנו בודקים, ספרו לנו עוד <span class="opt">(לא חובה)</span></h2>
     <div class="grid">
@@ -194,6 +203,10 @@ f2.addEventListener('submit', async e => {
   formCard.hidden = true; waitCard.hidden = false; waitCard.scrollIntoView({behavior: 'smooth', block: 'start'});
   let i = 0; statusEl.textContent = STEPS[0];
   const t = setInterval(() => { i = Math.min(i + 1, STEPS.length - 1); statusEl.textContent = STEPS[i]; }, 15000);
+  // the server gives no progress, so the bar eases toward 95% over about two minutes and fills on the result
+  const bar = document.getElementById('bar'), t0 = Date.now();
+  bar.style.width = '2%';
+  const tb = setInterval(() => { bar.style.width = (2 + 93 * (1 - Math.exp(-(Date.now() - t0) / 45000))) + '%'; }, 500);
   try {
     const r = await fetch('/api/audit', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
     const data = await r.json();
@@ -207,7 +220,7 @@ f2.addEventListener('submit', async e => {
     waitCard.hidden = true; formCard.hidden = false;
     goStep(err.step === 1 ? 1 : 2);
     showError(err.message);
-  } finally { clearInterval(t); btn.disabled = false; }
+  } finally { clearInterval(t); clearInterval(tb); bar.style.width = '100%'; btn.disabled = false; }
 });
 
 // Meta pixel: Lead when a report is delivered, Contact on the CTA click. No-op without the pixel.
