@@ -1,0 +1,276 @@
+<!doctype html>
+<!-- English version of index.html: keep the two in sync -->
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>What AI says about your business</title>
+<style>
+:root{--ink:#22121d;--muted:#6e5d68;--line:#eadfe5;--bg:#faf7f8;--card:#fff;--field:#fff;--fieldline:#d6c7cf;
+ --accent:#4a0638;--on-accent:#fff;--pale:#f3e6ee;--answer:#3a2a34;
+ --good:#137a43;--goodbg:#e8f6ee;--warn:#9a5b00;--warnstripe:#e2a03f;--warnbg:#fff4e0;--bad:#b42318;--badbg:#fdecea}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--ink:#f3e9ee;--muted:#b9a7b2;--line:#3a2a34;--bg:#160d13;
+ --card:#21141c;--field:#2a1a24;--fieldline:#4b3542;--accent:#d98bbd;--on-accent:#1a0a14;--pale:#3a1d2f;--answer:#e3d6dd;
+ --good:#5fd394;--goodbg:#12301f;--warn:#f0b45a;--warnstripe:#f0b45a;--warnbg:#33240c;--bad:#ff8a7e;--badbg:#3a1714;color-scheme:dark}}
+:root[data-theme="dark"]{--ink:#f3e9ee;--muted:#b9a7b2;--line:#3a2a34;--bg:#160d13;
+ --card:#21141c;--field:#2a1a24;--fieldline:#4b3542;--accent:#d98bbd;--on-accent:#1a0a14;--pale:#3a1d2f;--answer:#e3d6dd;
+ --good:#5fd394;--goodbg:#12301f;--warn:#f0b45a;--warnstripe:#f0b45a;--warnbg:#33240c;--bad:#ff8a7e;--badbg:#3a1714;color-scheme:dark}
+[hidden]{display:none!important}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;line-height:1.6}
+main{max-width:860px;margin:auto;padding:28px 16px 64px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px;margin-bottom:16px}
+h1{font-size:clamp(26px,5vw,38px);line-height:1.2;margin:4px 0 10px}h2{font-size:22px;margin:0 0 6px}
+.sub{color:var(--muted);margin:0 0 18px}.eyebrow{font-size:12px;font-weight:700;letter-spacing:.08em;color:var(--accent)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:620px){.grid{grid-template-columns:1fr}}
+label{display:block;font-size:14px;font-weight:600;margin-bottom:4px}
+input,select,textarea{width:100%;padding:12px;border:1px solid var(--fieldline);border-radius:10px;font:inherit;background:var(--field);color:var(--ink)}
+.full{grid-column:1/-1}.checks{display:flex;flex-wrap:wrap;gap:8px 16px;font-weight:400}.checks label{font-weight:400;display:flex;gap:6px;align-items:center}
+.checks input{width:auto}fieldset{border:0;padding:0;margin:0}
+button{margin-top:16px;width:100%;border:0;border-radius:12px;padding:15px;background:var(--accent);color:var(--on-accent);font:inherit;font-weight:700;font-size:17px;cursor:pointer}
+button:disabled{opacity:.6;cursor:wait}.note{font-size:13px;color:var(--muted);margin-top:10px}
+#status{margin:0 0 14px;font-weight:600}#errorBox{margin:14px 0}.error{background:var(--badbg);color:var(--bad);border-radius:10px;padding:12px}
+.summary{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}.pill{background:var(--pale);border-radius:999px;padding:6px 12px;font-size:14px}
+.section{margin:26px 0 8px;font-size:19px}
+.f{border-inline-start:5px solid var(--line)}.f.good{border-inline-start-color:var(--good)}.f.warn{border-inline-start-color:var(--warnstripe)}.f.bad{border-inline-start-color:var(--bad)}
+.f h3{margin:0 0 6px;font-size:17px}.f p{margin:6px 0;white-space:pre-line}.f ul{margin:6px 0;padding-inline-start:20px}
+.tag{font-size:12px;color:var(--muted)}.action{background:var(--bg);border-radius:10px;padding:10px 12px;margin-top:10px;font-size:15px}
+details{margin-top:8px}summary{cursor:pointer;color:var(--accent);font-weight:600}
+.ans{border-top:1px solid var(--line);padding:10px 0;font-size:14px}.ans .q{font-weight:700}.ans .t{white-space:pre-line;color:var(--answer)}
+.yes{color:var(--good);font-weight:700}.no{color:var(--bad);font-weight:700}.src{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.cta{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}.cta a{display:inline-block;margin-top:10px;background:var(--on-accent);color:var(--accent);padding:10px 16px;border-radius:10px;font-weight:700;text-decoration:none}
+footer{color:var(--muted);font-size:12px;margin-top:28px}
+.brand{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px;font-size:14px}
+.brand a{color:var(--accent);font-weight:700;text-decoration:none}.brand span{color:var(--muted)}
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.note a{color:var(--accent)}
+.stack{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px}@media(max-width:620px){.stack{grid-template-columns:1fr}}
+.stack div{background:var(--bg);border-radius:10px;padding:10px 12px}.stack b{display:block;font-size:14px;margin-bottom:4px}
+.stack ul{list-style:none;padding:0;margin:0;font-size:14px}.stack li{display:flex;gap:6px}.stack .off{color:var(--muted)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.opt{font-weight:400;color:var(--muted,#888);font-size:.85em}
+</style>
+{% if pixel_id %}
+<script>
+!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;
+s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
+fbq('init', {{ pixel_id|tojson }}); fbq('track', 'PageView');
+</script>
+<noscript><img height="1" width="1" style="display:none" alt="" src="https://www.facebook.com/tr?id={{ pixel_id }}&ev=PageView&noscript=1"></noscript>
+{% endif %}
+</head>
+<body><main>
+<header class="brand"><a href="https://www.growthwithmoran.com/">Growth With Moran</a><span>AI visibility check</span></header>
+
+<section class="card" id="formCard">
+  <div class="eyebrow">FREE CHECK</div>
+  <h1>What does AI recommend to customers looking for a business like yours?</h1>
+  <p class="sub">We ask {{ engines|join(", ") if engines else "ChatGPT" }} the questions customers ask in your field, and show whether it recommends you, what it knows about the business, and how your site is set up for marketing. The check takes about a minute.</p>
+  <form id="f1">
+    <input type="hidden" name="lang" value="en">
+    <div class="grid">
+      <div class="full"><label for="url">Website address</label><input id="url" name="url" type="text" inputmode="url" placeholder="www.example.com" required></div>
+      <div class="full" id="nameBox" hidden><label for="business_name">Business name <span class="opt">(filled in from your site, you can edit it)</span></label><input id="business_name" name="business_name"></div>
+      <div><label for="business_type">What the business does (the way a customer would search)</label><input id="business_type" name="business_type" placeholder="For example: accountant, dental clinic, marketing agency" required></div>
+      <div><label for="scope">Where do your customers come from?</label>
+        <select id="scope" name="scope" required><option value="israel">Across my country</option><option value="local">My local area</option><option value="global">Anywhere / online</option></select></div>
+      <div id="cityBox" hidden><label for="city">City or area</label><input id="city" name="city" placeholder="For example: London, Manchester"></div>
+    </div>
+    <button id="next" type="submit">See what AI says</button>
+    <p class="note">AI answers change from run to run, so each question is checked more than once. Nothing is made up: every finding says what was actually checked.</p>
+  </form>
+  <form id="f2" hidden>
+    <h2>Where should we send the results?</h2>
+    <p class="sub" id="checking"></p>
+    <div class="grid">
+      <div><label for="name">Name</label><input id="name" name="name" autocomplete="given-name" required></div>
+      <div><label for="phone">Phone</label><input id="phone" name="phone" type="tel" autocomplete="tel" inputmode="tel" required></div>
+      <div class="full"><label for="email">Email <span class="opt">(optional)</span></label><input id="email" name="email" type="email" autocomplete="email"></div>
+    </div>
+    <button id="go" type="submit">Run the check</button>
+    <p class="note"><a href="#" id="back">Back to the business details</a></p>
+  </form>
+</section>
+
+<section class="card" id="waitCard" hidden>
+  <div id="status" role="status" aria-live="polite"></div>
+  <form id="extra">
+    <h2>While we check, tell us a bit more <span class="opt">(optional)</span></h2>
+    <div class="grid">
+      <div><label for="site_platform">What is the site built on?</label>
+        <select id="site_platform" name="site_platform"><option value="">Choose</option><option>WordPress</option><option>Wix</option><option>Shopify</option><option>Webflow</option><option>Other</option><option>Not sure</option></select></div>
+      <div><label for="ad_budget">Monthly ad budget</label>
+        <select id="ad_budget" name="ad_budget"><option value="">Choose</option><option>Not advertising yet</option><option>Up to €2,000</option><option>€2,000–10,000</option><option>Over €10,000</option></select></div>
+      <fieldset class="full"><label>Where do you advertise today?</label>
+        <div class="checks">
+          <label><input type="checkbox" name="ad_platforms" value="Google">Google</label>
+          <label><input type="checkbox" name="ad_platforms" value="Facebook & Instagram">Facebook &amp; Instagram</label>
+          <label><input type="checkbox" name="ad_platforms" value="LinkedIn">LinkedIn</label>
+          <label><input type="checkbox" name="ad_platforms" value="TikTok">TikTok</label>
+          <label><input type="checkbox" name="ad_platforms" value="Other">Other</label>
+          <label><input type="checkbox" name="ad_platforms" value="Not advertising">Not advertising</label>
+        </div></fieldset>
+      <div class="full"><label for="goal">What matters most to you?</label>
+        <select id="goal" name="goal"><option value="">Choose</option><option>More customers</option><option>Ads that pay off</option><option>Showing up in Google and AI</option><option>Knowing what works</option></select></div>
+    </div>
+    <p class="note" id="saved" aria-live="polite"></p>
+  </form>
+</section>
+<div id="errorBox" role="alert"></div>
+<section id="report"></section>
+<footer>The check is based on AI answers and a scan of the homepage. It doesn't guarantee a result and isn't a substitute for advice.</footer>
+</main>
+
+<script>
+const PRELOADED = {{ report|tojson }};
+const MORE = {{ more_engines|tojson }};
+const CTA_URL = {{ cta_url|tojson }}, CTA_TEXT = {{ cta_text|tojson }};
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const LABEL = {chatgpt:'ChatGPT', gemini:'Gemini', claude:'Claude'};
+const f1 = document.getElementById('f1'), f2 = document.getElementById('f2'), extra = document.getElementById('extra'),
+      btn = document.getElementById('go'), statusEl = document.getElementById('status'), errorEl = document.getElementById('errorBox'),
+      waitCard = document.getElementById('waitCard'), formCard = document.getElementById('formCard'),
+      out = document.getElementById('report');
+const STEPS = ['Asking AI the questions your customers ask…','Checking who appears in the answers…','Checking whether AI bots can get into the site…','Preparing the report…'];
+const LEAD_KEY = Array.from(crypto.getRandomValues(new Uint8Array(12)), x => x.toString(16).padStart(2, '0')).join('');
+const showError = msg => { errorEl.innerHTML = msg ? '<div class="error">' + esc(msg) + '</div>' : ''; };
+
+const scopeEl = document.getElementById('scope'), cityBox = document.getElementById('cityBox'), cityEl = document.getElementById('city');
+const syncCity = () => { const local = scopeEl.value === 'local'; cityBox.hidden = !local; cityEl.required = local; if (!local) cityEl.value = ''; };
+scopeEl.addEventListener('change', syncCity); syncCity();
+
+// Business name: looked up from the site's title, shown prefilled so the visitor only fixes it if needed
+const urlEl = document.getElementById('url'), nameBox = document.getElementById('nameBox'), bizEl = document.getElementById('business_name');
+let looked = '', lookup = Promise.resolve(), nameEdited = false;
+bizEl.addEventListener('input', () => { nameEdited = true; });
+function lookupName() {
+  const u = urlEl.value.trim();
+  if (!u || u === looked) return lookup;
+  looked = u;
+  nameBox.hidden = false; bizEl.required = true;
+  if (!nameEdited) bizEl.placeholder = 'Looking up the business name on your site…';
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 8000);
+  lookup = fetch('/api/site-name?url=' + encodeURIComponent(u), {signal: ctl.signal})
+    .then(r => r.json()).then(d => { if (d.name && !nameEdited && looked === u) bizEl.value = d.name; })
+    .catch(() => {}).finally(() => { clearTimeout(timer); bizEl.placeholder = 'Business name'; });
+  return lookup;
+}
+urlEl.addEventListener('change', lookupName);
+
+function goStep(n) {
+  f1.hidden = n !== 1; f2.hidden = n !== 2;
+  if (n === 2) {
+    document.getElementById('checking').textContent = 'Checking ' + bizEl.value.trim() + '. The results will appear here on screen within a minute or two.';
+    document.getElementById('name').focus();
+  }
+  formCard.scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+document.getElementById('back').addEventListener('click', e => { e.preventDefault(); showError(''); goStep(1); });
+
+f1.addEventListener('submit', async e => {
+  e.preventDefault(); showError('');
+  if (!bizEl.value.trim()) {
+    const b = document.getElementById('next'); b.disabled = true;
+    await lookupName(); b.disabled = false;
+    if (!bizEl.value.trim()) { bizEl.focus(); f1.reportValidity(); return; }
+  }
+  goStep(2);
+});
+
+// Optional answers on the waiting screen: saved as they're picked, merged into the lead by LEAD_KEY
+let extraTimer = null;
+function sendExtra() {
+  clearTimeout(extraTimer); extraTimer = null;
+  const fd = new FormData(extra), body = Object.fromEntries(fd.entries());
+  body.ad_platforms = fd.getAll('ad_platforms'); body.lead_key = LEAD_KEY;
+  if (document.getElementById('ad_budget').selectedIndex >= 3) qualify('budget');  // the two top budget options
+  fetch('/api/extra', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body), keepalive: true})
+    .then(r => { if (r.ok) document.getElementById('saved').textContent = 'Saved, thank you!'; }).catch(() => {});
+}
+extra.addEventListener('change', () => { clearTimeout(extraTimer); extraTimer = setTimeout(sendExtra, 1200); });
+
+f2.addEventListener('submit', async e => {
+  e.preventDefault(); showError('');
+  const body = Object.assign(Object.fromEntries(new FormData(f1).entries()), Object.fromEntries(new FormData(f2).entries()));
+  body.lead_key = LEAD_KEY;
+  const qs = new URLSearchParams(location.search);
+  ['utm_source','utm_campaign','utm_content'].forEach(k => body[k] = qs.get(k) || '');
+  btn.disabled = true; out.innerHTML = '';
+  formCard.hidden = true; waitCard.hidden = false; waitCard.scrollIntoView({behavior: 'smooth', block: 'start'});
+  let i = 0; statusEl.textContent = STEPS[0];
+  const t = setInterval(() => { i = Math.min(i + 1, STEPS.length - 1); statusEl.textContent = STEPS[i]; }, 15000);
+  try {
+    const r = await fetch('/api/audit', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    const data = await r.json();
+    if (!r.ok || !data.ok) { const err = new Error(data.error || 'The check failed'); err.step = data.step; throw err; }
+    if (extraTimer) sendExtra();  // an answer picked in the last second still reaches the lead
+    waitCard.hidden = true;
+    render(data.report);
+    track('Lead', {content_name: 'ai-check'}, data.report.id);
+    if (data.report.summary.advertises) qualify('ad_pixel');
+    history.replaceState(null, '', '/r/' + data.report.id);
+  } catch (err) {
+    waitCard.hidden = true; formCard.hidden = false;
+    goStep(err.step === 1 ? 1 : 2);
+    showError(err.message);
+  } finally { clearInterval(t); btn.disabled = false; }
+});
+
+// Meta pixel: Lead when a report is delivered, Contact on the CTA click. No-op without the pixel.
+// QualifiedLead: a lead that already advertises (ad pixel on the site, or a monthly budget of 2,000+).
+// The campaign can optimize for it instead of for every lead. Sent at most once per visit.
+let qualified = false;
+function qualify(reason) {
+  if (qualified) return; qualified = true;
+  try { if (window.fbq) fbq('trackCustom', 'QualifiedLead', {reason}, {eventID: 'QualifiedLead-' + LEAD_KEY}); } catch (e) {}
+}
+function track(ev, params, id) {
+  try { if (window.fbq) fbq('track', ev, params || {}, id ? {eventID: ev + '-' + id} : undefined); } catch (e) {}
+}
+document.addEventListener('click', e => { if (e.target.closest('.cta a')) track('Contact', {content_name: 'ai-check-cta'}); });
+
+function finding(f) {
+  return `<article class="card f ${esc(f.level)}"><div class="tag">${esc(f.status)}</div><h3>${esc(f.title)}</h3>
+    ${f.body ? `<p>${esc(f.body)}</p>` : ''}
+    ${f.grid ? '<div class="stack">' + f.grid.map(g => `<div><b>${esc(g.group)}</b><ul>` + g.rows.map(x =>
+      `<li class="${x.ok ? '' : 'off'}"><span class="${x.ok ? 'yes' : 'no'}" aria-hidden="true">${x.ok ? '✓' : '✗'}</span>${esc(x.name)}<span class="sr">${x.ok ? ' (detected)' : ' (not detected)'}</span></li>`).join('') + '</ul></div>').join('') + '</div>' : ''}
+    ${f.items.length ? '<ul>' + f.items.map(x => `<li>${esc(x)}</li>`).join('') + '</ul>' : ''}
+    ${f.action ? `<div class="action"><b>What to do: </b>${esc(f.action)}</div>` : ''}</article>`;
+}
+
+function answers(ai) {
+  if (!ai || !ai.recommend || !ai.recommend.length) return '';
+  const rows = ai.recommend.concat(ai.knowledge || []).map(r => `<div class="ans">
+     <div class="q">${esc(LABEL[r.engine] || r.engine)} · “${esc(r.question)}”</div>
+     ${r.error ? `<div class="no">The check failed</div>` :
+       `<div>${r.identity === 'other' ? '<span class="no">Describes a different business</span>' : r.mentioned ? '<span class="yes">The business appeared</span>' : '<span class="no">The business didn\'t appear</span>'}</div>
+        <div class="t" dir="auto">${esc(r.text)}</div>`}
+   </div>`).join('');
+  return `<details class="card"><summary>All the full answers (${ai.recommend.length + (ai.knowledge || []).length})</summary>${rows}</details>`;
+}
+
+function render(r) {
+  const s = r.summary, b = r.business;
+  let html = `<section class="card"><div class="eyebrow">Report for ${esc(b.name)}</div>
+    <h2>${esc(b.domain)}</h2><div class="tag">Created ${esc(r.generated_at)}</div>
+    <div class="summary">
+      <span class="pill">You appeared in ${s.ai_mentions} of ${s.ai_answers} AI answers</span>
+      <span class="pill">We detected ${(s.tags || []).length} marketing and measurement tools on the site</span>
+    </div></section>`;
+  let last = '';
+  for (const f of r.findings) {
+    if (f.section !== last) { html += `<h3 class="section">${esc(f.section)}</h3>`; last = f.section; }
+    html += finding(f);
+  }
+  html += answers(r.ai);
+  if (MORE.length) {
+    html += `<section class="card cta"><h2>Want to see what ${esc(MORE.join(' and '))} answer too?</h2>
+      <p>In a short call we'll run the check on every engine, go over the findings and see what's most worth fixing first.</p>
+      ${CTA_URL ? `<a href="${esc(CTA_URL)}" target="_blank" rel="noopener">${esc(CTA_TEXT)}</a>` : ''}</section>`;
+  }
+  out.innerHTML = html;
+  out.scrollIntoView({behavior: 'smooth'});
+}
+
+if (PRELOADED) { formCard.hidden = true; render(PRELOADED); }
+</script>
+</body></html>

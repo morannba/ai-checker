@@ -44,7 +44,7 @@ def _host(url):
 
 
 # --- ChatGPT ---------------------------------------------------------------
-def _ask_openai(question, city, use_search=True):
+def _ask_openai(question, city, use_search=True, country="IL"):
     base = _env("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
     headers = {"Authorization": "Bearer " + _env("OPENAI_API_KEY"), "Content-Type": "application/json"}
     body = {"model": _env("OPENAI_MODEL", "gpt-4.1-mini"), "input": question}
@@ -54,7 +54,9 @@ def _ask_openai(question, city, use_search=True):
         if tool_type:
             tool = {"type": tool_type}
             if city is not None:  # None = customers from anywhere, so no location hint
-                tool["user_location"] = {"type": "approximate", "country": "IL"}
+                tool["user_location"] = {"type": "approximate"}
+                if country:
+                    tool["user_location"]["country"] = country
                 if city:
                     tool["user_location"]["city"] = city
             body["tools"] = [tool]
@@ -80,7 +82,7 @@ def _ask_openai(question, city, use_search=True):
 
 
 # --- Gemini ----------------------------------------------------------------
-def _ask_gemini(question, city, use_search=True):
+def _ask_gemini(question, city, use_search=True, country="IL"):
     base = _env("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta").rstrip("/")
     model = _env("GEMINI_MODEL", "gemini-2.5-flash")
     body = {"contents": [{"role": "user", "parts": [{"text": question}]}]}
@@ -104,14 +106,18 @@ def _ask_gemini(question, city, use_search=True):
 
 
 # --- Claude ----------------------------------------------------------------
-def _ask_claude(question, city, use_search=True):
+def _ask_claude(question, city, use_search=True, country="IL"):
     base = _env("ANTHROPIC_BASE_URL", "https://api.anthropic.com").rstrip("/")
     body = {"model": _env("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001"), "max_tokens": 1500,
             "messages": [{"role": "user", "content": question}]}
     if use_search:
         tool = {"type": _env("ANTHROPIC_SEARCH_TOOL", "web_search_20250305"), "name": "web_search", "max_uses": 3}
         if city is not None:
-            tool["user_location"] = {"type": "approximate", "country": "IL", "timezone": "Asia/Jerusalem"}
+            tool["user_location"] = {"type": "approximate"}
+            if country:
+                tool["user_location"]["country"] = country
+            if country == "IL":
+                tool["user_location"]["timezone"] = "Asia/Jerusalem"
             if city:
                 tool["user_location"]["city"] = city
         body["tools"] = [tool]
@@ -133,10 +139,11 @@ def _ask_claude(question, city, use_search=True):
 _ASK = {"chatgpt": _ask_openai, "gemini": _ask_gemini, "claude": _ask_claude}
 
 
-def ask(engine, question, city="", use_search=True):
-    """Returns dict(engine, question, text, citations, error). Never raises."""
+def ask(engine, question, city="", use_search=True, country="IL"):
+    """Returns dict(engine, question, text, citations, error). Never raises.
+    city None = no location hint; country None = city only (or nothing)."""
     try:
-        text, cites = _ASK[engine](question, city, use_search)
+        text, cites = _ASK[engine](question, city, use_search, country)
         seen, uniq = set(), []
         for c in cites:
             c["domain"] = c.get("domain") or _host(c["url"])
