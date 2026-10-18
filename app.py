@@ -132,7 +132,7 @@ LEAD_LABELS = [("name", "שם"), ("phone", "טלפון"), ("email", "מייל"),
                ("business_type", "תחום"), ("scope", "לקוחות"), ("city", "עיר"), ("ad_budget", "תקציב פרסום"),
                ("ad_platforms", "מפרסם ב"), ("site_platform", "האתר בנוי על"), ("goal", "מה הכי חשוב"),
                ("ai_mentions", "הופעות ב-AI"), ("ai_answers", "מתוך תשובות"), ("blocked_search_bots", "בוטים חסומים"),
-               ("tags", "כלי מדידה"), ("utm_source", "utm_source"), ("utm_campaign", "utm_campaign"),
+               ("tags", "כלי מדידה"), ("advertises", "פיקסל פרסום באתר"), ("utm_source", "utm_source"), ("utm_campaign", "utm_campaign"),
                ("utm_content", "utm_content"), ("lang", "שפת הבדיקה"), ("report_url", "הדוח")]
 
 
@@ -146,6 +146,8 @@ def email_lead(row, update=False):
         head = "עוד פרטים לליד" if update else "ליד חדש מבדיקת AI"
         if row.get("lang") == "en":
             head += " (אנגלית)"
+        if row.get("advertises") == "כן":
+            head = "⭐ " + head + " (מפרסם)"
         msg["Subject"] = f"{head}: {row.get('business_name', '')} ({row.get('ad_budget') or 'בלי תקציב'})"
         msg["From"] = os.environ.get("SMTP_FROM") or os.environ["SMTP_USER"]
         msg["To"] = os.environ["LEAD_EMAIL_TO"]
@@ -334,7 +336,7 @@ def api_audit():
         "city": get("city"), "scope": report["business"]["scope"], "url": report["business"]["url"],
         "ai_answers": s["ai_answers"], "ai_mentions": s["ai_mentions"],
         "blocked_search_bots": ", ".join(s["blocked_search_bots"]),
-        "tags": ", ".join(s["tags"]), "utm_source": get("utm_source"), "utm_campaign": get("utm_campaign"),
+        "tags": ", ".join(s["tags"]), "advertises": "כן" if s.get("advertises") else "לא", "utm_source": get("utm_source"), "utm_campaign": get("utm_campaign"),
         "utm_content": get("utm_content"), "lang": "en" if lang == "en" else "", "report_url": request.host_url.rstrip("/") + "/r/" + rid,
     }
     key = str(p.get("lead_key", ""))

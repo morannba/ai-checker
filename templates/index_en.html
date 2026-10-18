@@ -182,6 +182,7 @@ function sendExtra() {
   clearTimeout(extraTimer); extraTimer = null;
   const fd = new FormData(extra), body = Object.fromEntries(fd.entries());
   body.ad_platforms = fd.getAll('ad_platforms'); body.lead_key = LEAD_KEY;
+  if (document.getElementById('ad_budget').selectedIndex >= 3) qualify('budget');  // the two top budget options
   fetch('/api/extra', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body), keepalive: true})
     .then(r => { if (r.ok) document.getElementById('saved').textContent = 'Saved, thank you!'; }).catch(() => {});
 }
@@ -205,6 +206,7 @@ f2.addEventListener('submit', async e => {
     waitCard.hidden = true;
     render(data.report);
     track('Lead', {content_name: 'ai-check'}, data.report.id);
+    if (data.report.summary.advertises) qualify('ad_pixel');
     history.replaceState(null, '', '/r/' + data.report.id);
   } catch (err) {
     waitCard.hidden = true; formCard.hidden = false;
@@ -214,6 +216,13 @@ f2.addEventListener('submit', async e => {
 });
 
 // Meta pixel: Lead when a report is delivered, Contact on the CTA click. No-op without the pixel.
+// QualifiedLead: a lead that already advertises (ad pixel on the site, or a monthly budget of 2,000+).
+// The campaign can optimize for it instead of for every lead. Sent at most once per visit.
+let qualified = false;
+function qualify(reason) {
+  if (qualified) return; qualified = true;
+  try { if (window.fbq) fbq('trackCustom', 'QualifiedLead', {reason}, {eventID: 'QualifiedLead-' + LEAD_KEY}); } catch (e) {}
+}
 function track(ev, params, id) {
   try { if (window.fbq) fbq('track', ev, params || {}, id ? {eventID: ev + '-' + id} : undefined); } catch (e) {}
 }

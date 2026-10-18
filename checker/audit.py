@@ -429,4 +429,6 @@ def summarize(report):
         "ai_mentions": sum(r["mentioned"] for r in ok),
         "blocked_search_bots": blocked,
         "tags": [k for k, v in report["site"]["marketing"]["tags"].items() if v],
+        # an ad pixel on the site means the business already pays for ads: the leads worth chasing
+        "advertises": any(report["site"]["marketing"]["stack"]["פרסום"].values()),
     }
