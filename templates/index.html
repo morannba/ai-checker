@@ -202,6 +202,7 @@ f2.addEventListener('submit', async e => {
     waitCard.hidden = true;
     render(data.report);
     track('Lead', {content_name: 'ai-check'}, data.report.id);
+    if (QUALIFIED_BUDGETS.includes(body.ad_budget)) track('QualifiedLead', {content_name: 'ai-check', budget: body.ad_budget}, data.report.id, true);
     history.replaceState(null, '', '/r/' + data.report.id);
   } catch (err) {
     waitCard.hidden = true; formCard.hidden = false;
@@ -210,9 +211,11 @@ f2.addEventListener('submit', async e => {
   } finally { clearInterval(t); btn.disabled = false; }
 });
 
-// Meta pixel: Lead when a report is delivered, Contact on the CTA click. No-op without the pixel.
-function track(ev, params, id) {
-  try { if (window.fbq) fbq('track', ev, params || {}, id ? {eventID: ev + '-' + id} : undefined); } catch (e) {}
+// Meta pixel: Lead when a report is delivered, QualifiedLead (custom) on top of it when the budget is
+// ₪2,000 or more so campaigns can optimize for leads with a budget, Contact on the CTA click. No-op without the pixel.
+const QUALIFIED_BUDGETS = ['₪2,000–10,000', 'מעל ₪10,000'];
+function track(ev, params, id, custom) {
+  try { if (window.fbq) fbq(custom ? 'trackCustom' : 'track', ev, params || {}, id ? {eventID: ev + '-' + id} : undefined); } catch (e) {}
 }
 document.addEventListener('click', e => { if (e.target.closest('.cta a')) track('Contact', {content_name: 'ai-check-cta'}); });
 
