@@ -79,7 +79,7 @@ def client_ip():
 _audit_slots = threading.BoundedSemaphore(int(os.environ.get("MAX_CONCURRENT_AUDITS", "3")))
 
 
-EXTRA_FIELDS = ["site_platform", "ad_platforms", "ad_budget", "goal"]  # optional, asked while the check runs
+EXTRA_FIELDS = ["site_platform", "ad_platforms", "ad_budget", "goal"]  # asked while the check runs (ad_budget is now required up front)
 _extras, _saved = {}, {}  # lead_key -> answers given so far / -> the saved lead, for answers that come in late
 
 
@@ -267,6 +267,8 @@ def api_audit():
         return jsonify(ok=False, step=1, error="בשדה \"מה העסק עושה\" כתבו את התחום כמו שלקוח היה מחפש (למשל: יועץ שיווק דיגיטלי), ולא את שם העסק."), 400
     if get("scope") == "local" and not get("city"):
         return jsonify(ok=False, step=1, error="כתבו באיזו עיר או אזור העסק פועל, או בחרו שהלקוחות מגיעים מכל הארץ."), 400
+    if not get("ad_budget"):
+        return jsonify(ok=False, step=1, error="בחרו את תקציב הפרסום החודשי."), 400
     if not get("name"):
         return jsonify(ok=False, step=2, error="כתבו את השם שלכם."), 400
     if not 9 <= len(digits) <= 13:
