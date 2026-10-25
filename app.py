@@ -182,6 +182,11 @@ def index():
     return render_template("index.html", **page_ctx())
 
 
+@app.get("/privacy")
+def privacy():
+    return render_template("privacy.html")
+
+
 @app.get("/r/<rid>")
 def saved_report(rid):
     if not re.fullmatch(r"[a-f0-9]{12}", rid):
