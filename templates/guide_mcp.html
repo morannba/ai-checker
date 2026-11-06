@@ -39,6 +39,7 @@ label{display:block;font-size:14px;font-weight:600;margin-bottom:4px}
 input{width:100%;padding:13px;border:1px solid var(--fieldline);border-radius:10px;font:inherit;background:var(--field);color:var(--ink);direction:ltr;text-align:right}
 .btn,button.btn{display:block;text-align:center;text-decoration:none;margin-top:12px;width:100%;border:0;border-radius:12px;padding:15px;background:var(--accent);color:var(--on-accent);font:inherit;font-weight:700;font-size:17px;cursor:pointer}
 button:disabled{opacity:.6;cursor:wait}.note{font-size:13px;color:var(--muted);margin-top:10px}.note a{color:var(--accent)}
+.opt{font-weight:400;color:var(--muted);font-size:.9em}
 .error{background:var(--badbg);color:var(--bad);border-radius:10px;padding:10px 12px;margin-top:10px}
 .gate{border:2px solid var(--accent)}
 .cta{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}.cta h2{color:var(--on-accent)}
@@ -128,13 +129,15 @@ Get-Command pipx, uvx | Select-Object -ExpandProperty Source</code></pre></div>
 <section class="card gate" id="gate">
   <div id="gateForm">
     <h2>להמשך המדריך: איפה לשלוח?</h2>
-    <p>השלבים הבאים הם החיבורים עצמם, קובץ ההגדרות המלא והפתרונות לשגיאות. משאירים מייל, והמדריך נפתח כאן מיד.</p>
+    <p>השלבים הבאים הם החיבורים עצמם, קובץ ההגדרות המלא והפתרונות לשגיאות. משאירים מייל ואתר, והמדריך נפתח כאן מיד.</p>
     <form id="lf" novalidate>
-      <label for="email">כתובת מייל</label>
+      <label for="email">מייל <span class="opt">(עדיף של העבודה)</span></label>
       <input id="email" name="email" type="email" inputmode="email" autocomplete="email" placeholder="name@company.co.il" required>
+      <label for="site" style="margin-top:12px">אתר העסק</label>
+      <input id="site" name="site" type="text" inputmode="url" autocomplete="url" placeholder="www.example.co.il" required>
       <button class="btn" id="go" type="submit">לפתוח את המדריך המלא</button>
       <div id="err" role="alert"></div>
-      <p class="note">רק מייל, בלי טלפון. ייתכן שאשלח עדכון כשהמדריך מתעדכן. <a href="/privacy">מדיניות פרטיות</a></p>
+      <p class="note">בלי טלפון. ייתכן שאשלח עדכון כשהמדריך מתעדכן. <a href="/privacy">מדיניות פרטיות</a></p>
     </form>
   </div>
   <div id="gateDone" hidden><h2>המדריך פתוח 👇</h2><p>ממשיכים לשלב 2.</p></div>
@@ -261,6 +264,7 @@ Get-Command pipx, uvx | Select-Object -ExpandProperty Source</code></pre></div>
   <div class="code"><pre><code>איזה נכסי GA4, חשבונות Google Ads ואתרים ב-Search Console יש לי גישה אליהם?</code></pre></div>
   <p>ואז לשאלות שבאמת חוסכות זמן:</p>
   <ul>
+    <li>„כמה עלה ליד בכל קמפיין החודש, לפי טופס הלידים שמוגדר כ-key event ב-GA4?”</li>
     <li>„אילו קמפיינים בגוגל אדס הוציאו יותר מ-500 ₪ ב-30 הימים האחרונים בלי אף המרה?”</li>
     <li>„אילו מונחי חיפוש הביאו קליקים בתשלום, ואני כבר מדורג עליהם אורגנית בעמוד הראשון?”</li>
     <li>„אילו עמודים מקבלים הרבה חשיפות ב-Search Console אבל CTR מתחת ל-1%? תציע כותרות חדשות.”</li>
@@ -310,13 +314,14 @@ try { if (localStorage.getItem(KEY)) openGuide(false); } catch (e) {}
 const qs = new URLSearchParams(location.search);
 document.getElementById('lf').addEventListener('submit', async e => {
   e.preventDefault();
-  const email = document.getElementById('email').value.trim(), err = document.getElementById('err'), btn = document.getElementById('go');
+  const email = document.getElementById('email').value.trim(), site = document.getElementById('site').value.trim(), err = document.getElementById('err'), btn = document.getElementById('go');
   err.innerHTML = '';
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { err.innerHTML = '<div class="error">כתובת המייל לא תקינה.</div>'; return; }
+  if (!/^(https?:\/\/)?[^\s\/]+\.[^\s]{2,}$/.test(site)) { err.innerHTML = '<div class="error">כתבו את כתובת האתר של העסק, למשל www.example.co.il</div>'; return; }
   btn.disabled = true;
   try {
     const r = await fetch('/api/guide-lead', {method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({email, utm_source: qs.get('utm_source') || '', utm_campaign: qs.get('utm_campaign') || '', utm_content: qs.get('utm_content') || ''})});
+      body: JSON.stringify({email, site, utm_source: qs.get('utm_source') || '', utm_campaign: qs.get('utm_campaign') || '', utm_content: qs.get('utm_content') || ''})});
     const data = await r.json().catch(() => ({}));
     if (!r.ok || !data.ok) throw new Error(data.error || 'משהו השתבש. נסו שוב.');
     track('Lead', {content_name: 'mcp-guide'});

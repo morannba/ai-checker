@@ -189,8 +189,8 @@ def privacy():
 
 # --- free guide: connecting Claude to Google Ads, Search Console and GA4 over MCP (email = the lead) ---
 GUIDE_CSV = os.path.join(DATA, "guide_leads.csv")
-GUIDE_FIELDS = ["time", "email", "guide", "utm_source", "utm_campaign", "utm_content", "page_url"]
-GUIDE_LABELS = [("email", "מייל"), ("guide", "מדריך"), ("utm_source", "utm_source"), ("utm_campaign", "utm_campaign"),
+GUIDE_FIELDS = ["time", "email", "site", "guide", "utm_source", "utm_campaign", "utm_content", "page_url"]
+GUIDE_LABELS = [("email", "מייל"), ("site", "אתר"), ("guide", "מדריך"), ("utm_source", "utm_source"), ("utm_campaign", "utm_campaign"),
                 ("utm_content", "utm_content"), ("page_url", "עמוד")]
 
 
@@ -207,9 +207,12 @@ def api_guide_lead():
     email = get("email").lower()
     if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
         return jsonify(ok=False, error="כתובת המייל לא תקינה."), 400
+    site = get("site", 300)
+    if not re.fullmatch(r"(https?://)?[^\s/]+\.[^\s]{2,}", site):
+        return jsonify(ok=False, error="כתבו את כתובת האתר של העסק, למשל www.example.co.il"), 400
     if not _take([("guide-ip:" + client_ip(), int(os.environ.get("MAX_GUIDE_PER_IP", "10")))]):
         return jsonify(ok=True)  # don't block the guide; just stop writing more leads from this IP today
-    row = {"time": datetime.datetime.now().isoformat(timespec="seconds"), "email": email, "guide": "MCP לגוגל",
+    row = {"time": datetime.datetime.now().isoformat(timespec="seconds"), "email": email, "site": site, "guide": "MCP לגוגל",
            "utm_source": get("utm_source"), "utm_campaign": get("utm_campaign"), "utm_content": get("utm_content"),
            "page_url": request.host_url.rstrip("/") + "/guide/mcp"}
     new = not os.path.exists(GUIDE_CSV)
@@ -220,7 +223,7 @@ def api_guide_lead():
         w.writerow(row)
     if os.environ.get("LEAD_EMAIL_TO", "").strip():
         threading.Thread(target=email_lead, args=(row,), daemon=True,
-                         kwargs={"subject": f"ליד חדש מהמדריך (MCP לגוגל): {email}", "labels": GUIDE_LABELS}).start()
+                         kwargs={"subject": f"ליד חדש מהמדריך (MCP לגוגל): {site}", "labels": GUIDE_LABELS}).start()
     return jsonify(ok=True)
 
 
