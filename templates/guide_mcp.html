@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>מדריך: לחבר את Claude לגוגל אדס, Search Console ו-GA4</title>
+<meta name="description" content="מדריך חינמי בעברית, צעד אחר צעד: לחבר את Claude ב-MCP ל-Google Ads, Google Search Console ו-Google Analytics 4, ולשאול שאלות על הנתונים בשפה רגילה.">
+<style>
+:root{--ink:#22121d;--muted:#6e5d68;--line:#eadfe5;--bg:#faf7f8;--card:#fff;--field:#fff;--fieldline:#d6c7cf;
+ --accent:#4a0638;--on-accent:#fff;--pale:#f3e6ee;--code:#f4eef1;--codeink:#2b1a25;--warnbg:#fff4e0;--warn:#7a4800;--bad:#b42318;--badbg:#fdecea}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--ink:#f3e9ee;--muted:#b9a7b2;--line:#3a2a34;--bg:#160d13;
+ --card:#21141c;--field:#2a1a24;--fieldline:#4b3542;--accent:#d98bbd;--on-accent:#1a0a14;--pale:#3a1d2f;--code:#140b11;--codeink:#eadde4;
+ --warnbg:#33240c;--warn:#f0c27a;--bad:#ff8a7e;--badbg:#3a1714;color-scheme:dark}}
+:root[data-theme="dark"]{--ink:#f3e9ee;--muted:#b9a7b2;--line:#3a2a34;--bg:#160d13;
+ --card:#21141c;--field:#2a1a24;--fieldline:#4b3542;--accent:#d98bbd;--on-accent:#1a0a14;--pale:#3a1d2f;--code:#140b11;--codeink:#eadde4;
+ --warnbg:#33240c;--warn:#f0c27a;--bad:#ff8a7e;--badbg:#3a1714;color-scheme:dark}
+[hidden]{display:none!important}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;line-height:1.7}
+main{max-width:820px;margin:auto;padding:28px 16px 64px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px;margin-bottom:16px}
+h1{font-size:clamp(26px,5vw,38px);line-height:1.2;margin:4px 0 10px}h2{font-size:22px;margin:0 0 8px;line-height:1.3}h3{font-size:17px;margin:18px 0 4px}
+.sub{color:var(--muted);margin:0 0 14px;font-size:17px}.eyebrow{font-size:12px;font-weight:700;letter-spacing:.08em;color:var(--accent)}
+p,li{margin:6px 0}ol,ul{padding-inline-start:22px}a{color:var(--accent)}
+.brand{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px;font-size:14px}
+.brand a{color:var(--accent);font-weight:700;text-decoration:none}.brand span{color:var(--muted)}
+.num{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:var(--accent);color:var(--on-accent);font-weight:700;font-size:15px;margin-inline-end:8px;flex:none}
+.step h2{display:flex;align-items:center}
+.toc{list-style:none;padding:0;margin:12px 0 0;display:grid;gap:6px}.toc li{display:flex;align-items:center;gap:8px;margin:0}
+.toc .num{width:24px;height:24px;font-size:12px;margin:0}
+.lock{font-size:13px;color:var(--muted)}
+.pills{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 0}.pill{background:var(--pale);border-radius:999px;padding:5px 12px;font-size:14px}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.88em;background:var(--code);color:var(--codeink);padding:1px 5px;border-radius:5px;direction:ltr;unicode-bidi:isolate;overflow-wrap:anywhere}
+.code{position:relative;margin:10px 0}
+pre{direction:ltr;text-align:left;background:var(--code);color:var(--codeink);border:1px solid var(--line);border-radius:10px;padding:40px 14px 14px;overflow-x:auto;font-size:13px;line-height:1.55;margin:0}
+pre code{background:none;padding:0;font-size:inherit}
+.copy{position:absolute;top:8px;right:8px;border:1px solid var(--fieldline);background:var(--card);color:var(--ink);border-radius:8px;padding:3px 10px;font:inherit;font-size:12px;cursor:pointer}
+.tip,.warn{border-radius:10px;padding:10px 14px;margin:12px 0;font-size:15px}.tip{background:var(--pale)}.warn{background:var(--warnbg);color:var(--warn)}
+.tip b,.warn b{display:block}
+label{display:block;font-size:14px;font-weight:600;margin-bottom:4px}
+input{width:100%;padding:13px;border:1px solid var(--fieldline);border-radius:10px;font:inherit;background:var(--field);color:var(--ink);direction:ltr;text-align:right}
+.btn,button.btn{display:block;text-align:center;text-decoration:none;margin-top:12px;width:100%;border:0;border-radius:12px;padding:15px;background:var(--accent);color:var(--on-accent);font:inherit;font-weight:700;font-size:17px;cursor:pointer}
+button:disabled{opacity:.6;cursor:wait}.note{font-size:13px;color:var(--muted);margin-top:10px}.note a{color:var(--accent)}
+.opt{font-weight:400;color:var(--muted);font-size:.9em}
+.error{background:var(--badbg);color:var(--bad);border-radius:10px;padding:10px 12px;margin-top:10px}
+.gate{border:2px solid var(--accent)}
+.cta{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}.cta h2{color:var(--on-accent)}
+.cta a.btn{background:var(--on-accent);color:var(--accent)}
+table{width:100%;border-collapse:collapse;font-size:14px;margin:10px 0}td,th{border-top:1px solid var(--line);padding:8px 6px;text-align:right;vertical-align:top}th{font-size:13px;color:var(--muted)}
+.scroll{overflow-x:auto}
+footer{color:var(--muted);font-size:12px;margin-top:28px}
+a:focus-visible,button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+details{margin:8px 0}summary{cursor:pointer;color:var(--accent);font-weight:600}
+</style>
+{% if pixel_id %}
+<script>
+!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;
+s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
+fbq('init', {{ pixel_id|tojson }}); fbq('track', 'PageView'); fbq('track', 'ViewContent', {content_name: 'mcp-guide'});
+</script>
+<noscript><img height="1" width="1" style="display:none" alt="" src="https://www.facebook.com/tr?id={{ pixel_id }}&ev=PageView&noscript=1"></noscript>
+{% endif %}
+</head>
+<body><main>
+<header class="brand"><a href="https://www.growthwithmoran.com/">Growth With Moran</a><span>מדריך חינמי</span></header>
+
+<section class="card">
+  <div class="eyebrow">מדריך חינמי · צעד אחר צעד</div>
+  <h1>לחבר את Claude לגוגל אדס, Search Console ו-GA4</h1>
+  <p class="sub">במקום לקפוץ בין שלוש מערכות ולייצא דוחות לאקסל, שואלים את Claude בשפה רגילה: „אילו קמפיינים הוציאו כסף בלי המרות החודש?”, „אילו עמודים מקבלים חשיפות בגוגל אבל כמעט לא קליקים?”. Claude שולף את הנתונים בעצמו, מהחשבונות שלכם.</p>
+  <div class="pills"><span class="pill">כ-45 דקות</span><span class="pill">Claude Desktop או Claude Code</span><span class="pill">קריאה בלבד, כברירת מחדל</span></div>
+  <ol class="toc">
+    <li><span class="num">1</span>הכנה: פרויקט ב-Google Cloud והכלים שצריך במחשב</li>
+    <li><span class="num">2</span>התחברות אחת לכל השירותים (כאן רוב האנשים נתקעים)</li>
+    <li><span class="num">3</span>Google Analytics 4</li>
+    <li><span class="num">4</span>Google Ads, כולל ה-Developer Token</li>
+    <li><span class="num">5</span>Google Search Console</li>
+    <li><span class="num">6</span>קובץ ההגדרות המלא של Claude</li>
+    <li><span class="num">7</span>שאלות ראשונות ששווה לשאול</li>
+    <li><span class="num">8</span>שגיאות נפוצות ואיך לפתור אותן</li>
+  </ol>
+</section>
+
+<section class="card">
+  <h2>למי זה מתאים</h2>
+  <p>למי שמנהל פרסום בעצמו (או מנהל שיווק בחברה) ומשתמש כבר ב-Claude. לא צריך לדעת לתכנת, אבל צריך להיות בנוח עם הדבקת כמה פקודות בטרמינל ועריכה של קובץ הגדרות אחד.</p>
+  <p>מה צריך מראש:</p>
+  <ul>
+    <li>Claude Desktop (Mac או Windows) או Claude Code.</li>
+    <li>גישה לחשבון Google Ads, לנכס GA4 ולנכס ב-Search Console, עם אותו חשבון גוגל.</li>
+    <li>חשבון Google Cloud (חינמי, לא צריך להפעיל חיוב בשביל המדריך הזה).</li>
+  </ul>
+</section>
+
+<section class="card step" id="s1">
+  <h2><span class="num">1</span>הכנה: פרויקט ב-Google Cloud והכלים במחשב</h2>
+  <h3>א. פרויקט והפעלת ה-APIs</h3>
+  <ol>
+    <li>נכנסים ל-<a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">Google Cloud Console</a> ויוצרים פרויקט חדש (למשל <code>claude-marketing</code>). רושמים בצד את ה-<b>Project ID</b>.</li>
+    <li>ב-APIs &amp; Services → Library מפעילים (Enable) ארבעה APIs:
+      <ul>
+        <li><a href="https://console.cloud.google.com/apis/library/analyticsadmin.googleapis.com" target="_blank" rel="noopener">Google Analytics Admin API</a></li>
+        <li><a href="https://console.cloud.google.com/apis/library/analyticsdata.googleapis.com" target="_blank" rel="noopener">Google Analytics Data API</a></li>
+        <li><a href="https://console.cloud.google.com/apis/library/googleads.googleapis.com" target="_blank" rel="noopener">Google Ads API</a></li>
+        <li><a href="https://console.cloud.google.com/apis/library/searchconsole.googleapis.com" target="_blank" rel="noopener">Google Search Console API</a></li>
+      </ul>
+    </li>
+  </ol>
+  <h3>ב. מסך הסכמה ו-OAuth Client</h3>
+  <ol>
+    <li>ב-Google Auth Platform (לשעבר OAuth consent screen) מגדירים אפליקציה. סוג משתמשים: <b>External</b> (או Internal אם יש לכם Google Workspace).</li>
+    <li>ב-Audience מוסיפים את המייל שלכם תחת <b>Test users</b>.</li>
+    <li>ב-Clients → Create client בוחרים <b>Desktop app</b>, ומורידים את קובץ ה-JSON. שומרים אותו במקום קבוע, למשל <code>~/claude-mcp/client_secret.json</code>. אותו קובץ ישמש את כל שלושת החיבורים.</li>
+  </ol>
+  <div class="warn"><b>שימו לב: התחברות שפגה אחרי שבוע</b>כל עוד האפליקציה במצב Testing, גוגל מבטלת את ההתחברות אחרי 7 ימים, ו-Claude פתאום „מאבד” את הנתונים. לשימוש אישי אפשר ללחוץ Publish app ב-Audience. גוגל תציג אזהרה שהאפליקציה לא מאומתת, וזה בסדר כשאתם המשתמשים היחידים.</div>
+  <h3>ג. כלים במחשב</h3>
+  <ul>
+    <li><a href="https://cloud.google.com/sdk/docs/install" target="_blank" rel="noopener">Google Cloud CLI</a> (הפקודה <code>gcloud</code>).</li>
+    <li><a href="https://pipx.pypa.io/stable/installation/" target="_blank" rel="noopener">pipx</a>, שמריץ את השרתים הרשמיים של גוגל ל-GA4 ול-Ads.</li>
+    <li><a href="https://docs.astral.sh/uv/getting-started/installation/" target="_blank" rel="noopener">uv</a> (הפקודה <code>uvx</code>), שמריץ את השרת של Search Console.</li>
+  </ul>
+  <p>אחרי ההתקנה מוצאים את הנתיב המלא של כל כלי, כי Claude Desktop לא תמיד מכיר את ה-PATH של הטרמינל:</p>
+  <div class="code"><pre><code># Mac
+which pipx uvx
+
+# Windows (PowerShell)
+Get-Command pipx, uvx | Select-Object -ExpandProperty Source</code></pre></div>
+</section>
+
+<section class="card gate" id="gate">
+  <div id="gateForm">
+    <h2>להמשך המדריך: איפה לשלוח?</h2>
+    <p>השלבים הבאים הם החיבורים עצמם, קובץ ההגדרות המלא והפתרונות לשגיאות. משאירים מייל ואתר, והמדריך נפתח כאן מיד.</p>
+    <form id="lf" novalidate>
+      <label for="email">מייל <span class="opt">(עדיף של העבודה)</span></label>
+      <input id="email" name="email" type="email" inputmode="email" autocomplete="email" placeholder="name@company.co.il" required>
+      <label for="site" style="margin-top:12px">אתר העסק</label>
+      <input id="site" name="site" type="text" inputmode="url" autocomplete="url" placeholder="www.example.co.il" required>
+      <button class="btn" id="go" type="submit">לפתוח את המדריך המלא</button>
+      <div id="err" role="alert"></div>
+      <p class="note">בלי טלפון. ייתכן שאשלח עדכון כשהמדריך מתעדכן. <a href="/privacy">מדיניות פרטיות</a></p>
+    </form>
+  </div>
+  <div id="gateDone" hidden><h2>המדריך פתוח 👇</h2><p>ממשיכים לשלב 2.</p></div>
+</section>
+
+<div id="full" hidden>
+
+<section class="card step" id="s2">
+  <h2><span class="num">2</span>התחברות אחת לכל השירותים</h2>
+  <p>השרתים של GA4 ושל Google Ads קוראים את אותו קובץ התחברות של gcloud. אם מתחברים פעמיים, כל פעם עם הרשאה אחרת, ההתחברות השנייה דורסת את הראשונה ואחד החיבורים מפסיק לעבוד. לכן מתחברים <b>פעם אחת, עם כל ההרשאות יחד</b>:</p>
+  <div class="code"><pre><code>gcloud auth application-default login \
+  --client-id-file=$HOME/claude-mcp/client_secret.json \
+  --scopes=https://www.googleapis.com/auth/analytics.readonly,https://www.googleapis.com/auth/adwords,https://www.googleapis.com/auth/cloud-platform</code></pre></div>
+  <p>ב-Windows כותבים הכול בשורה אחת, בלי ה-<code>\</code>, ועם הנתיב המלא לקובץ.</p>
+  <p>נפתח דפדפן, מתחברים עם חשבון הגוגל שיש לו גישה לנכסים ומאשרים. בסוף מופיעה שורה כזו, ואת הנתיב שבה מעתיקים:</p>
+  <div class="code"><pre><code>Credentials saved to file: [/Users/you/.config/gcloud/application_default_credentials.json]</code></pre></div>
+  <div class="tip"><b>למה בלי הרשאת Search Console כאן?</b>השרת של Search Console לא משתמש ב-gcloud. הוא פותח חלון התחברות משלו בפעם הראשונה שמשתמשים בו (שלב 5).</div>
+</section>
+
+<section class="card step" id="s3">
+  <h2><span class="num">3</span>Google Analytics 4</h2>
+  <p>משתמשים בשרת ה-MCP הרשמי של גוגל, <a href="https://github.com/googleanalytics/google-analytics-mcp" target="_blank" rel="noopener">google-analytics-mcp</a>. הוא מריץ דוחות GA4 (כולל משפכים, המרות ונתוני זמן אמת), מציג את הנכסים ואת הקישורים ל-Google Ads, וכברירת מחדל רק קורא.</p>
+  <p>ההגדרה שלו בקובץ של Claude (את הקובץ המלא בונים בשלב 6):</p>
+  <div class="code"><pre><code>"analytics-mcp": {
+  "command": "/FULL/PATH/TO/pipx",
+  "args": ["run", "analytics-mcp"],
+  "env": {
+    "GOOGLE_APPLICATION_CREDENTIALS": "/FULL/PATH/TO/application_default_credentials.json",
+    "GOOGLE_CLOUD_PROJECT": "YOUR_PROJECT_ID"
+  }
+}</code></pre></div>
+  <p>אין צורך במזהה נכס בהגדרות. Claude מוצא לבד את הנכסים שיש לכם גישה אליהם, ואפשר לומר לו באיזה נכס לעבוד.</p>
+</section>
+
+<section class="card step" id="s4">
+  <h2><span class="num">4</span>Google Ads</h2>
+  <p>גם כאן יש שרת רשמי של גוגל, <a href="https://github.com/googleads/google-ads-mcp" target="_blank" rel="noopener">google-ads-mcp</a>. הוא שולף כל נתון מהחשבון בשאילתות GAQL, ש-Claude כותב בעצמו.</p>
+  <h3>א. Developer Token, החלק שהכי הרבה אנשים נתקעים בו</h3>
+  <ol>
+    <li>הטוקן מונפק רק מ<b>חשבון מנהל (MCC)</b>. אם אין לכם, פותחים חשבון מנהל בחינם ומקשרים אליו את חשבון המודעות.</li>
+    <li>בחשבון המנהל: Admin → <b>API Center</b>, ממלאים את הטופס ומקבלים טוקן.</li>
+    <li>טוקן חדש מתחיל ברמת גישה מוגבלת. אם הוא ברמת Test, הוא עובד רק על חשבונות בדיקה, וצריך לבקש באותו מסך רמת גישה גבוהה יותר. גוגל בודקת את הבקשה, וזה יכול לקחת כמה ימים.</li>
+  </ol>
+  <h3>ב. ההגדרה</h3>
+  <div class="code"><pre><code>"google-ads-mcp": {
+  "command": "/FULL/PATH/TO/pipx",
+  "args": ["run", "--spec", "git+https://github.com/googleads/google-ads-mcp.git", "google-ads-mcp"],
+  "env": {
+    "GOOGLE_APPLICATION_CREDENTIALS": "/FULL/PATH/TO/application_default_credentials.json",
+    "GOOGLE_PROJECT_ID": "YOUR_PROJECT_ID",
+    "GOOGLE_ADS_DEVELOPER_TOKEN": "YOUR_DEVELOPER_TOKEN",
+    "GOOGLE_ADS_LOGIN_CUSTOMER_ID": "1234567890"
+  }
+}</code></pre></div>
+  <ul>
+    <li><code>GOOGLE_ADS_LOGIN_CUSTOMER_ID</code> הוא מספר חשבון המנהל, <b>בלי מקפים</b>. צריך אותו כשהגישה לחשבון המודעות עוברת דרך חשבון מנהל.</li>
+    <li>הטוקן הוא סוד. לא שולחים אותו בצ'אט, לא שומרים אותו בגיט ולא מצלמים מסך שהוא מופיע בו.</li>
+  </ul>
+  <div class="tip"><b>האם Claude יכול לשנות משהו בחשבון?</b>השרת כולל גם כמה פעולות כתיבה (נכסים ותוויות), אבל כל שינוי עובר קודם „הצעה” ורק אחרי אישור מפורש מתבצע. מי שרוצה קריאה בלבד יכול לכבות אותן בקובץ <code>tools_config.yaml</code> של השרת (<code>assets: false</code>, <code>labels: false</code>).</div>
+</section>
+
+<section class="card step" id="s5">
+  <h2><span class="num">5</span>Google Search Console</h2>
+  <p>לגוגל אין (נכון לנובמבר 2026) שרת MCP רשמי ל-Search Console, ולכן משתמשים בשרת קוד פתוח מוכר, <a href="https://github.com/AminForou/mcp-gsc" target="_blank" rel="noopener">mcp-gsc</a>. הוא שולף שאילתות, עמודים, CTR ומיקומים, משווה בין תקופות ובודק אינדוקס של כתובות.</p>
+  <div class="code"><pre><code>"gsc": {
+  "command": "/FULL/PATH/TO/uvx",
+  "args": ["mcp-search-console"],
+  "env": {
+    "GSC_OAUTH_CLIENT_SECRETS_FILE": "/FULL/PATH/TO/client_secret.json"
+  }
+}</code></pre></div>
+  <p>זה אותו קובץ <code>client_secret.json</code> משלב 1. בפעם הראשונה ש-Claude משתמש בו ייפתח דפדפן להתחברות, ומשם הוא זוכר.</p>
+  <div class="tip"><b>נכס מסוג Domain</b>אם הנכס ב-Search Console הוא מסוג Domain, הכתובת שלו היא <code>sc-domain:example.co.il</code> ולא <code>https://example.co.il/</code>. כש-Claude לא „מוצא” את האתר, זו כמעט תמיד הסיבה.</div>
+</section>
+
+<section class="card step" id="s6">
+  <h2><span class="num">6</span>קובץ ההגדרות המלא</h2>
+  <p><b>Claude Desktop:</b> Settings → Developer → <b>Edit Config</b>. זה פותח את הקובץ:</p>
+  <ul>
+    <li>Mac: <code>~/Library/Application Support/Claude/claude_desktop_config.json</code></li>
+    <li>Windows: <code>%APPDATA%\Claude\claude_desktop_config.json</code></li>
+  </ul>
+  <p>מדביקים את זה, ומחליפים כל ערך באותיות גדולות בערכים שלכם:</p>
+  <div class="code"><pre><code>{
+  "mcpServers": {
+    "analytics-mcp": {
+      "command": "/FULL/PATH/TO/pipx",
+      "args": ["run", "analytics-mcp"],
+      "env": {
+        "GOOGLE_APPLICATION_CREDENTIALS": "/FULL/PATH/TO/application_default_credentials.json",
+        "GOOGLE_CLOUD_PROJECT": "YOUR_PROJECT_ID"
+      }
+    },
+    "google-ads-mcp": {
+      "command": "/FULL/PATH/TO/pipx",
+      "args": ["run", "--spec", "git+https://github.com/googleads/google-ads-mcp.git", "google-ads-mcp"],
+      "env": {
+        "GOOGLE_APPLICATION_CREDENTIALS": "/FULL/PATH/TO/application_default_credentials.json",
+        "GOOGLE_PROJECT_ID": "YOUR_PROJECT_ID",
+        "GOOGLE_ADS_DEVELOPER_TOKEN": "YOUR_DEVELOPER_TOKEN",
+        "GOOGLE_ADS_LOGIN_CUSTOMER_ID": "YOUR_MANAGER_ID_NO_DASHES"
+      }
+    },
+    "gsc": {
+      "command": "/FULL/PATH/TO/uvx",
+      "args": ["mcp-search-console"],
+      "env": {
+        "GSC_OAUTH_CLIENT_SECRETS_FILE": "/FULL/PATH/TO/client_secret.json"
+      }
+    }
+  }
+}</code></pre></div>
+  <ul>
+    <li>ב-Windows כותבים נתיבים עם לוכסן כפול: <code>C:\\Users\\you\\claude-mcp\\client_secret.json</code>.</li>
+    <li>אם כבר יש בקובץ <code>mcpServers</code>, מוסיפים את שלושת הבלוקים לתוכו ולא יוצרים עוד אחד.</li>
+    <li>שומרים, <b>סוגרים את Claude לגמרי</b> (Cmd+Q ב-Mac, או מה-tray ב-Windows) ופותחים מחדש. בתפריט הכלים בצ'אט אמורים להופיע שלושת החיבורים.</li>
+  </ul>
+  <p><b>Claude Code:</b> אותם שלושה בלוקים נכנסים תחת <code>mcpServers</code> בקובץ <code>.mcp.json</code> בתיקיית הפרויקט, או מוסיפים כל אחד בפקודה <code>claude mcp add</code>. בודקים עם <code>/mcp</code>.</p>
+</section>
+
+<section class="card step" id="s7">
+  <h2><span class="num">7</span>שאלות ראשונות ששווה לשאול</h2>
+  <p>מתחילים בבדיקה שהכול מחובר:</p>
+  <div class="code"><pre><code>איזה נכסי GA4, חשבונות Google Ads ואתרים ב-Search Console יש לי גישה אליהם?</code></pre></div>
+  <p>ואז לשאלות שבאמת חוסכות זמן:</p>
+  <ul>
+    <li>„כמה עלה ליד בכל קמפיין החודש, לפי טופס הלידים שמוגדר כ-key event ב-GA4?”</li>
+    <li>„אילו קמפיינים בגוגל אדס הוציאו יותר מ-500 ₪ ב-30 הימים האחרונים בלי אף המרה?”</li>
+    <li>„אילו מונחי חיפוש הביאו קליקים בתשלום, ואני כבר מדורג עליהם אורגנית בעמוד הראשון?”</li>
+    <li>„אילו עמודים מקבלים הרבה חשיפות ב-Search Console אבל CTR מתחת ל-1%? תציע כותרות חדשות.”</li>
+    <li>„תשווה בין ההמרות שגוגל אדס מדווח לבין מה ש-GA4 רואה מתנועה ממומנת, לפי קמפיין. איפה הפער הכי גדול?”</li>
+    <li>„מה דף הנחיתה עם שיעור ההמרה הכי נמוך מתנועה ממומנת, ומה היה שונה בו בחודש שעבר?”</li>
+  </ul>
+  <div class="tip"><b>הטריק שעושה את ההבדל</b>Claude לא יודע מה נחשב אצלכם „ליד טוב”, איך נקראים הקמפיינים ומה כל המרה מייצגת. כמה שורות הסבר בתחילת השיחה (או ב-Project עם הוראות קבועות) משפרות את התשובות יותר מכל דבר אחר.</div>
+</section>
+
+<section class="card step" id="s8">
+  <h2><span class="num">8</span>שגיאות נפוצות ואיך לפתור אותן</h2>
+  <div class="scroll"><table>
+    <tr><th>מה רואים</th><th>מה לעשות</th></tr>
+    <tr><td><code>spawn pipx ENOENT</code> או <code>spawn uvx ENOENT</code>, או שהחיבור לא מופיע</td><td>Claude Desktop לא מוצא את הכלי. שמים ב-<code>command</code> את הנתיב המלא משלב 1ג.</td></tr>
+    <tr><td><b>Access blocked</b> או „האפליקציה לא אומתה” בהתחברות</td><td>מוסיפים את המייל שלכם ל-Test users (שלב 1ב), או ממשיכים דרך Advanced כשמדובר באפליקציה שלכם.</td></tr>
+    <tr><td><code>insufficient authentication scopes</code> / <code>ACCESS_TOKEN_SCOPE_INSUFFICIENT</code></td><td>ההתחברות נעשתה בלי אחת ההרשאות. מריצים שוב את הפקודה משלב 2, עם כל ההרשאות יחד.</td></tr>
+    <tr><td><code>DEVELOPER_TOKEN_NOT_APPROVED</code></td><td>הטוקן ברמת Test. מבקשים רמת גישה גבוהה יותר ב-API Center.</td></tr>
+    <tr><td><code>USER_PERMISSION_DENIED</code> בגוגל אדס</td><td>חסר או שגוי <code>GOOGLE_ADS_LOGIN_CUSTOMER_ID</code>: מספר חשבון המנהל, בלי מקפים.</td></tr>
+    <tr><td><code>SERVICE_DISABLED</code> / „API has not been used in project”</td><td>אחד מארבעת ה-APIs לא הופעל בפרויקט (שלב 1א), או שה-Project ID בקובץ שגוי.</td></tr>
+    <tr><td>אחרי שבוע הכול מפסיק לעבוד עם <code>invalid_grant</code></td><td>האפליקציה במצב Testing. מפרסמים אותה (Publish app) ומתחברים שוב.</td></tr>
+    <tr><td>GA4 מחזיר רשימה ריקה</td><td>התחברתם עם חשבון גוגל אחר מזה שיש לו גישה לנכס. מתחברים שוב עם החשבון הנכון.</td></tr>
+  </table></div>
+  <p class="note">אם יש שגיאה בקובץ ההגדרות עצמו (פסיק חסר, מירכאות), Claude Desktop מציג הודעה כשהוא עולה. אפשר להדביק את הקובץ ב-<a href="https://jsonlint.com" target="_blank" rel="noopener">jsonlint.com</a> בלי הסודות כדי למצוא את השגיאה.</p>
+</section>
+
+<section class="card cta">
+  <h2>נתקעת או שאין לך זמן? אחבר לך את זה</h2>
+  <p>החיבור הוא החלק הקל. מה שעושה את ההבדל הוא לדעת מה לשאול: איזה המרות באמת שוות כסף, איך הלידים מה-CRM חוזרים לגוגל, ואיפה התקציב בורח. אני עושה את זה ללקוחות, ואשמח לחבר גם לך.</p>
+  {% if cta_url %}<a class="btn" href="{{ cta_url }}" target="_blank" rel="noopener">לשיחה בוואטסאפ</a>{% endif %}
+</section>
+
+</div>
+
+<footer>מורן ויזל · Growth With Moran. המדריך מבוסס על התיעוד של השרתים כפי שהוא בנובמבר 2026. גוגל ו-Anthropic משנות ממשקים מדי פעם, ושמות של מסכים עשויים להשתנות.</footer>
+</main>
+
+<script>
+const KEY = 'mcpGuideOpen';
+const full = document.getElementById('full'), gateForm = document.getElementById('gateForm'), gateDone = document.getElementById('gateDone');
+function track(ev, params, custom) { try { if (window.fbq) fbq(custom ? 'trackCustom' : 'track', ev, params || {}); } catch (e) {} }
+function openGuide(scroll) {
+  full.hidden = false; gateForm.hidden = true; gateDone.hidden = false;
+  if (scroll) document.getElementById('s2').scrollIntoView({behavior: 'smooth'});
+}
+try { if (localStorage.getItem(KEY)) openGuide(false); } catch (e) {}
+
+const qs = new URLSearchParams(location.search);
+document.getElementById('lf').addEventListener('submit', async e => {
+  e.preventDefault();
+  const email = document.getElementById('email').value.trim(), site = document.getElementById('site').value.trim(), err = document.getElementById('err'), btn = document.getElementById('go');
+  err.innerHTML = '';
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { err.innerHTML = '<div class="error">כתובת המייל לא תקינה.</div>'; return; }
+  if (!/^(https?:\/\/)?[^\s\/]+\.[^\s]{2,}$/.test(site)) { err.innerHTML = '<div class="error">כתבו את כתובת האתר של העסק, למשל www.example.co.il</div>'; return; }
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/guide-lead', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({email, site, utm_source: qs.get('utm_source') || '', utm_campaign: qs.get('utm_campaign') || '', utm_content: qs.get('utm_content') || ''})});
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || !data.ok) throw new Error(data.error || 'משהו השתבש. נסו שוב.');
+    track('Lead', {content_name: 'mcp-guide'});
+    try { localStorage.setItem(KEY, '1'); } catch (e) {}
+    openGuide(true);
+  } catch (x) {
+    err.innerHTML = '<div class="error"></div>'; err.firstChild.textContent = x.message;
+  } finally { btn.disabled = false; }
+});
+
+// copy buttons on code blocks
+document.querySelectorAll('.code').forEach(box => {
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'copy'; b.textContent = 'העתקה';
+  b.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(box.querySelector('code').innerText); b.textContent = 'הועתק ✓'; }
+    catch (e) { b.textContent = 'לא הצליח'; }
+    setTimeout(() => b.textContent = 'העתקה', 1600);
+  });
+  box.appendChild(b);
+});
+document.addEventListener('click', e => { if (e.target.closest('.cta a')) track('Contact', {content_name: 'mcp-guide-cta'}); });
+</script>
+</body></html>

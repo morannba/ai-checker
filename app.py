@@ -139,18 +139,18 @@ LEAD_LABELS = [("name", "שם"), ("phone", "טלפון"), ("email", "מייל"),
 SCOPE_LABELS = {"local": "מהאזור", "israel": "מכל הארץ", "global": "גם מחו\"ל / אונליין"}
 
 
-def email_lead(row, update=False):
+def email_lead(row, update=False, subject=None, labels=LEAD_LABELS):
     """Send each lead by SMTP (e.g. Gmail with an app password). Settings in .env; failures only go to the log."""
     try:
         msg = EmailMessage()
         head = "עוד פרטים לליד" if update else "ליד חדש מבדיקת AI"
-        msg["Subject"] = f"{head}: {row.get('business_name', '')} ({row.get('ad_budget') or 'בלי תקציב'})"
+        msg["Subject"] = subject or f"{head}: {row.get('business_name', '')} ({row.get('ad_budget') or 'בלי תקציב'})"
         msg["From"] = os.environ.get("SMTP_FROM") or os.environ["SMTP_USER"]
         msg["To"] = os.environ["LEAD_EMAIL_TO"]
         if row.get("email"):
             msg["Reply-To"] = row["email"]
         shown = dict(row, scope=SCOPE_LABELS.get(row.get("scope"), row.get("scope", "")))
-        msg.set_content("\n".join(f"{label}: {shown.get(k, '')}" for k, label in LEAD_LABELS if shown.get(k, "") != ""))
+        msg.set_content("\n".join(f"{label}: {shown.get(k, '')}" for k, label in labels if shown.get(k, "") != ""))
         host, port = os.environ.get("SMTP_HOST", "smtp.gmail.com"), int(os.environ.get("SMTP_PORT", "465"))
         smtp = smtplib.SMTP_SSL(host, port, timeout=20) if port == 465 else smtplib.SMTP(host, port, timeout=20)
         with smtp:
@@ -185,6 +185,46 @@ def index():
 @app.get("/privacy")
 def privacy():
     return render_template("privacy.html")
+
+
+# --- free guide: connecting Claude to Google Ads, Search Console and GA4 over MCP (email = the lead) ---
+GUIDE_CSV = os.path.join(DATA, "guide_leads.csv")
+GUIDE_FIELDS = ["time", "email", "site", "guide", "utm_source", "utm_campaign", "utm_content", "page_url"]
+GUIDE_LABELS = [("email", "מייל"), ("site", "אתר"), ("guide", "מדריך"), ("utm_source", "utm_source"), ("utm_campaign", "utm_campaign"),
+                ("utm_content", "utm_content"), ("page_url", "עמוד")]
+
+
+@app.get("/guide/mcp")
+@app.get("/mcp")
+def guide_mcp():
+    return render_template("guide_mcp.html", **page_ctx())
+
+
+@app.post("/api/guide-lead")
+def api_guide_lead():
+    p = request.get_json(silent=True) or {}
+    get = lambda k, n=200: str(p.get(k, "") or "").strip()[:n]  # noqa: E731
+    email = get("email").lower()
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+        return jsonify(ok=False, error="כתובת המייל לא תקינה."), 400
+    site = get("site", 300)
+    if not re.fullmatch(r"(https?://)?[^\s/]+\.[^\s]{2,}", site):
+        return jsonify(ok=False, error="כתבו את כתובת האתר של העסק, למשל www.example.co.il"), 400
+    if not _take([("guide-ip:" + client_ip(), int(os.environ.get("MAX_GUIDE_PER_IP", "10")))]):
+        return jsonify(ok=True)  # don't block the guide; just stop writing more leads from this IP today
+    row = {"time": datetime.datetime.now().isoformat(timespec="seconds"), "email": email, "site": site, "guide": "MCP לגוגל",
+           "utm_source": get("utm_source"), "utm_campaign": get("utm_campaign"), "utm_content": get("utm_content"),
+           "page_url": request.host_url.rstrip("/") + "/guide/mcp"}
+    new = not os.path.exists(GUIDE_CSV)
+    with open(GUIDE_CSV, "a", newline="", encoding="utf-8-sig") as f:
+        w = csv.DictWriter(f, fieldnames=GUIDE_FIELDS, extrasaction="ignore")
+        if new:
+            w.writeheader()
+        w.writerow(row)
+    if os.environ.get("LEAD_EMAIL_TO", "").strip():
+        threading.Thread(target=email_lead, args=(row,), daemon=True,
+                         kwargs={"subject": f"ליד חדש מהמדריך (MCP לגוגל): {site}", "labels": GUIDE_LABELS}).start()
+    return jsonify(ok=True)
 
 
 @app.get("/r/<rid>")
