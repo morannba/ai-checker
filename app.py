@@ -141,16 +141,23 @@ SCOPE_LABELS = {"local": "מהאזור", "israel": "מכל הארץ", "global": 
 
 def email_lead(row, update=False):
     """Send each lead by SMTP (e.g. Gmail with an app password). Settings in .env; failures only go to the log."""
+    head = "עוד פרטים לליד" if update else "ליד חדש מבדיקת AI"
+    shown = dict(row, scope=SCOPE_LABELS.get(row.get("scope"), row.get("scope", "")))
+    send_mail(f"{head}: {row.get('business_name', '')} ({row.get('ad_budget') or 'בלי תקציב'})",
+              "\n".join(f"{label}: {shown.get(k, '')}" for k, label in LEAD_LABELS if shown.get(k, "") != ""),
+              reply_to=row.get("email"))
+
+
+def send_mail(subject, body, reply_to=None):
+    """One plain-text mail to LEAD_EMAIL_TO over SMTP. Failures only go to the log."""
     try:
         msg = EmailMessage()
-        head = "עוד פרטים לליד" if update else "ליד חדש מבדיקת AI"
-        msg["Subject"] = f"{head}: {row.get('business_name', '')} ({row.get('ad_budget') or 'בלי תקציב'})"
+        msg["Subject"] = subject
         msg["From"] = os.environ.get("SMTP_FROM") or os.environ["SMTP_USER"]
         msg["To"] = os.environ["LEAD_EMAIL_TO"]
-        if row.get("email"):
-            msg["Reply-To"] = row["email"]
-        shown = dict(row, scope=SCOPE_LABELS.get(row.get("scope"), row.get("scope", "")))
-        msg.set_content("\n".join(f"{label}: {shown.get(k, '')}" for k, label in LEAD_LABELS if shown.get(k, "") != ""))
+        if reply_to:
+            msg["Reply-To"] = reply_to
+        msg.set_content(body)
         host, port = os.environ.get("SMTP_HOST", "smtp.gmail.com"), int(os.environ.get("SMTP_PORT", "465"))
         smtp = smtplib.SMTP_SSL(host, port, timeout=20) if port == 465 else smtplib.SMTP(host, port, timeout=20)
         with smtp:
@@ -185,6 +192,66 @@ def index():
 @app.get("/privacy")
 def privacy():
     return render_template("privacy.html")
+
+
+# --- English landing page for the programmatic SEO service (traffic from Google Ads) ---
+PSEO_LEADS_CSV = os.path.join(DATA, "pseo_leads.csv")
+PSEO_FIELDS = ["time", "name", "email", "website", "data", "budget", "gclid", "utm_source", "utm_medium",
+               "utm_campaign", "utm_term", "utm_content", "landing_url"]
+PSEO_BUDGETS = ["Under $3,000", "$3,000 – $7,500", "$7,500 – $15,000", "$15,000+", "Not sure yet"]
+PSEO_LABELS = [("name", "Name"), ("email", "Work email"), ("website", "Website"),
+               ("budget", "Budget"), ("data", "Their data"), ("utm_source", "utm_source"), ("utm_campaign", "utm_campaign"),
+               ("utm_term", "Keyword"), ("gclid", "gclid"), ("landing_url", "Landing URL")]
+FREE_MAIL = re.compile(r"@(gmail|googlemail|yahoo|hotmail|outlook|live|icloud|me|aol|proton|protonmail|gmx|walla)\.", re.I)
+
+
+def pseo_ctx():
+    # Google Ads tag: GADS_ID like AW-123456789, GADS_LEAD_LABEL is the conversion label of the lead action
+    return {"gads_id": os.environ.get("GADS_ID", "").strip(), "gads_label": os.environ.get("GADS_LEAD_LABEL", "").strip(),
+            "pixel_id": os.environ.get("META_PIXEL_ID", "824516214280119"), "budgets": PSEO_BUDGETS,
+            "contact_email": os.environ.get("PSEO_CONTACT_EMAIL", "")}
+
+
+@app.get("/programmatic-seo")
+@app.get("/programmatic-seo/")
+def programmatic_seo():
+    return render_template("pseo.html", **pseo_ctx())
+
+
+@app.post("/api/pseo-lead")
+def api_pseo_lead():
+    p = request.get_json(silent=True) or {}
+    get = lambda k, n=200: str(p.get(k, "") or "").strip()[:n]  # noqa: E731
+    if get("company_fax"):  # honeypot: hidden from people, bots fill it in
+        return jsonify(ok=True)
+    if not get("name"):
+        return jsonify(ok=False, field="name", error="Please add your name."), 400
+    email = get("email")
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+        return jsonify(ok=False, field="email", error="Please enter a valid email address."), 400
+    if FREE_MAIL.search(email):
+        return jsonify(ok=False, field="email", error="Please use your work email, so I can see which company you're with."), 400
+    if not get("website"):
+        return jsonify(ok=False, field="website", error="Please add your company website."), 400
+    if len(get("data", 2000)) < 10:
+        return jsonify(ok=False, field="data", error="A sentence or two about your data helps me prepare for the call."), 400
+    if get("budget") not in PSEO_BUDGETS:
+        return jsonify(ok=False, field="budget", error="Please choose a budget range."), 400
+    if not _take([("pseo:" + client_ip(), int(os.environ.get("MAX_PSEO_PER_IP", "5")))]):
+        return jsonify(ok=False, error="Too many submissions today. Please email me instead."), 429
+    row = {k: get(k, 2000 if k == "data" else 300) for k in PSEO_FIELDS}
+    row["time"] = datetime.datetime.now().isoformat(timespec="seconds")
+    new = not os.path.exists(PSEO_LEADS_CSV)
+    with open(PSEO_LEADS_CSV, "a", newline="", encoding="utf-8-sig") as f:
+        w = csv.DictWriter(f, fieldnames=PSEO_FIELDS, extrasaction="ignore")
+        if new:
+            w.writeheader()
+        w.writerow(row)
+    if os.environ.get("LEAD_EMAIL_TO", "").strip():
+        body = "\n".join(f"{label}: {row[k]}" for k, label in PSEO_LABELS if row.get(k))
+        threading.Thread(target=send_mail, args=(f"ליד SEO פרוגרמטי: {row['website']} ({row['budget']})",
+                                                 body, email), daemon=True).start()
+    return jsonify(ok=True)
 
 
 @app.get("/r/<rid>")
